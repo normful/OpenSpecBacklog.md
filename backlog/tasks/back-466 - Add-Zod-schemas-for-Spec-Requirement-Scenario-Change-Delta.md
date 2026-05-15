@@ -9,6 +9,8 @@ ordinal: 24000
 ## Description
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Port OpenSpec's Zod schema validation system into Backlog.md. Create Zod schemas for: SpecSchema (name, overview, requirements[]), RequirementSchema (text with SHALL/MUST enforcement, scenarios[]), ScenarioSchema (rawText), ChangeSchema (name, why, whatChanges, deltas[]), DeltaSchema (spec, op ∈ {ADDED/MODIFIED/REMOVED/RENAMED}, description, requirements[], rename?: {from, to}). All markdown output must match OpenSpec's expected shape (#### Scenario: headers, ### Requirement: blocks, ## ADDED/MODIFIED/REMOVED/RENAMED Requirements sections). Add validation threshold constants matching OpenSpec (minWhySectionLength=50, maxDeltasPerChange=10, etc.) with optional config.yml integration via BacklogConfig.validation.
+
+Header level note: Spec/change/delta files live in backlog/specs/<name>/spec.md and backlog/changes/<name>/*.md — standalone files separate from Backlog.md task/docs/decision files. OpenSpec's ## sections (Purpose, Requirements, ADDED Requirements, etc.), ### Requirement: blocks, and #### Scenario: headers operate within their own file boundaries and never collide with Backlog.md's existing ## sections (Description, Acceptance Criteria, Implementation Plan, etc.). No conflict.
 <!-- SECTION:DESCRIPTION:END -->
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
