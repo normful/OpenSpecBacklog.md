@@ -309,6 +309,19 @@ export interface BacklogConfig {
 	onStatusChange?: string;
 	/** ID prefix configuration for tasks and drafts. Defaults to { task: "task", draft: "draft" } */
 	prefixes?: PrefixConfig;
+	/** Validation thresholds for OpenSpec spec/change schemas. Overrides hardcoded defaults. */
+	validation?: {
+		/** Minimum character length for Why section (default: 50) */
+		minWhySectionLength?: number;
+		/** Maximum character length for Why section (default: 1000) */
+		maxWhySectionLength?: number;
+		/** Maximum deltas per change (default: 10) */
+		maxDeltasPerChange?: number;
+		/** Minimum character length for Purpose section (default: 50) */
+		minPurposeLength?: number;
+		/** Maximum character length for requirement text (default: 500) */
+		maxRequirementTextLength?: number;
+	};
 	mcp?: {
 		http?: {
 			host?: string;
