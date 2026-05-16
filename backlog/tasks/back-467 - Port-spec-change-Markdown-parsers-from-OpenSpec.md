@@ -16,6 +16,8 @@ ordinal: 25000
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Port OpenSpec's three markdown parsers to Backlog.md: (1) requirement-blocks.ts — parses ### Requirement: blocks and delta sections (## ADDED/MODIFIED/REMOVED/RENAMED Requirements), extracts names, raw blocks, FROM/TO rename pairs. (2) spec-structure.ts — validates main spec files for structural issues. (3) change-parser.ts — parses proposal.md (Why / What Changes sections) + reads specs/<name>/spec.md for delta content. All parsers handle code-fence masking, nested section hierarchy, case-insensitive section matching, and cross-platform line endings.
+
+Relationship to BACK-466: Parsers are independent of the Zod schemas — they have their own types (RequirementBlock, RequirementsSectionParts, DeltaPlan) for raw markdown parse results. The Zod schemas validate the *parsed data* after the markdown → data transformation. The parsers' DeltaPlan.renamed type (Array<{from; to}>) matches DeltaSchema's rename?: {from; to} from BACK-466. Parsers live in src/openspec/parsers/. File paths for specs in backlog.md project: specs at backlog/specs/<name>/spec.md, changes at backlog/changes/<name>/proposal.md + specs/<name>/spec.md (mirrors OpenSpec's openspec/ layout but under backlog/).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
