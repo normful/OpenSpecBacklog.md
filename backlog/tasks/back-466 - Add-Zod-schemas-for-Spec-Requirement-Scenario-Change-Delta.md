@@ -1,6 +1,6 @@
 id: BACK-466
 title: 'Add Zod schemas for Spec, Requirement, Scenario, Change, Delta'
-status: To Do
+status: In Progress
 created_date: '2026-05-15 21:02'
 labels: []
 deps: []
