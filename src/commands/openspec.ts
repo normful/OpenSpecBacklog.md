@@ -8,9 +8,9 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { requireProjectRoot } from "../cli.ts";
 import { Core } from "../core/backlog.ts";
+import { archiveChange } from "../openspec/archive.ts";
 import { ArtifactGraph, detectCompleted, listSchemas, resolveSchema } from "../openspec/artifact-graph/index.ts";
 import type { SchemaYaml } from "../openspec/artifact-graph/types.ts";
-
 import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
@@ -424,6 +424,44 @@ export function registerChangeCommand(program: Command): void {
 			const projectRoot = await requireProjectRoot();
 			const summary = await syncSpecs(name, projectRoot, { dryRun: options.dryRun ?? false });
 			console.log(summary);
+		});
+
+	// ─── Archive subcommand ───
+
+	changeCmd
+		.command("archive <name>")
+		.description("archive a completed change set (moves to backlog/changes/archive/)")
+		.option("--force", "bypass artifact completeness check")
+		.option("--no-sync-check", "skip unsynced delta detection")
+		.action(async (name: string, options: { force?: boolean; noSyncCheck?: boolean }) => {
+			const projectRoot = await requireProjectRoot();
+			const result = archiveChange(name, projectRoot, {
+				force: options.force ?? false,
+				noSyncCheck: options.noSyncCheck ?? false,
+			});
+
+			if (result.success) {
+				console.log(`✓ Change "${result.changeName}" archived to ${result.archivePath}`);
+				console.log(`  ${result.doneArtifacts.length}/${result.totalArtifacts} artifacts complete`);
+				if (result.doneArtifacts.length > 0) {
+					console.log(`  Done: ${result.doneArtifacts.join(", ")}`);
+				}
+				if (result.hasUnsyncedDeltas) {
+					console.log("  (unsynced deltas were present but archived anyway)");
+				}
+			} else {
+				console.error(`✗ ${result.reason}`);
+				if (result.blockers.length > 0) {
+					console.error("  Blocked artifacts:");
+					for (const blocker of result.blockers) {
+						console.error(`    ◉ ${blocker}`);
+					}
+				}
+				if (result.doneArtifacts.length > 0) {
+					console.error(`  Done: ${result.doneArtifacts.join(", ")}`);
+				}
+				process.exitCode = 1;
+			}
 		});
 
 	// ─── Delta subcommand group ───
