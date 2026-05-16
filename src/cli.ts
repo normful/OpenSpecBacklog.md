@@ -10,6 +10,7 @@ import { runAdvancedConfigWizard } from "./commands/advanced-config-wizard.ts";
 import { type CompletionInstallResult, installCompletion, registerCompletionCommand } from "./commands/completion.ts";
 import { configureAdvancedSettings } from "./commands/configure-advanced-settings.ts";
 import { registerMcpCommand } from "./commands/mcp.ts";
+import { registerChangeCommand, registerSpecCommand } from "./commands/openspec.ts";
 import { pickTaskForEditWizard, runTaskCreateWizard, runTaskEditWizard } from "./commands/task-wizard.ts";
 import { DEFAULT_DIRECTORIES, DEFAULT_FILES, DEFAULT_STATUSES } from "./constants/index.ts";
 import { initializeProject } from "./core/init.ts";
@@ -266,7 +267,7 @@ function getDefaultAdvancedConfig(existingConfig?: BacklogConfig | null): Partia
  * Walks up the directory tree to find backlog/ or backlog.json, with git root fallback.
  * Exits with error message if no Backlog.md project is found.
  */
-async function requireProjectRoot(): Promise<string> {
+export async function requireProjectRoot(): Promise<string> {
 	let runtimeCwd: RuntimeCwdResolution;
 	try {
 		runtimeCwd = await resolveRuntimeCwd();
@@ -3910,6 +3911,10 @@ registerCompletionCommand(program);
 
 // MCP command group
 registerMcpCommand(program);
+
+// OpenSpec command groups
+registerSpecCommand(program);
+registerChangeCommand(program);
 
 program.parseAsync(process.argv).finally(() => {
 	// Restore BUN_OPTIONS after CLI parsing completes so it's available for subsequent commands

@@ -105,8 +105,8 @@ function parseSections(content: string): Section[] {
 			continue;
 		}
 
-		const level = headerMatch[1]?.length;
-		const title = headerMatch[2]?.trim();
+		const level = headerMatch[1]?.length ?? 1;
+		const title = headerMatch[2]?.trim() ?? "";
 		const contentLines = getContentUntilNextHeader(lines, codeFenceLineMask, i + 1, level);
 
 		const section: Section = {
@@ -151,7 +151,8 @@ function getContentUntilNextHeader(
 
 		if (!codeFenceLineMask[i]) {
 			const headerMatch = line.match(/^(#{1,6})\s+/);
-			if (headerMatch?.[1] && headerMatch[1].length <= currentLevel) {
+			const matchLevel = headerMatch?.[1]?.length ?? 0;
+			if (matchLevel > 0 && matchLevel <= currentLevel) {
 				break;
 			}
 		}
@@ -167,7 +168,7 @@ function parseRequirements(section: Section): Requirement[] {
 
 	for (const child of section.children) {
 		// Extract requirement text from first non-empty content line, fall back to heading
-		let text: string = child.title;
+		let text: string = child.title ?? "";
 
 		// Get content before any child sections (scenarios)
 		if (child.content.trim()) {
@@ -230,8 +231,8 @@ function parseDeltas(content: string): Delta[] {
 			continue;
 		}
 
-		const specName = deltaMatch[1]?.trim();
-		const description = deltaMatch[2]?.trim();
+		const specName = deltaMatch[1]?.trim() ?? "";
+		const description = deltaMatch[2]?.trim() ?? "";
 		let operation: DeltaOperation = "MODIFIED";
 		const lowerDesc = description.toLowerCase();
 
