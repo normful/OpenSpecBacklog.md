@@ -469,9 +469,12 @@ describe("archiveChange — error handling", () => {
 		expect(result.archivePath).toBeNull();
 	});
 
-	it("reports missing schema", () => {
-		// Don't create the schema in a sub-env
-		const emptyEnv = createTestEnv("no-schema");
+	it("reports missing schema when project-local overrides with broken schema", () => {
+		// Create project-local schema that overrides the package built-in with broken content
+		const emptyEnv = createTestEnv("bad-schema");
+		const schemaDir = join(emptyEnv.root, "openspec", "schemas", "spec-driven");
+		mkdirSync(schemaDir, { recursive: true });
+		writeFileSync(join(schemaDir, "schema.yaml"), "this is not valid yaml", "utf-8");
 		createChangeDir(emptyEnv, "my-change", { "proposal.md": "x", "design.md": "y" });
 
 		const result = archiveChange("my-change", emptyEnv.root, { force: false });

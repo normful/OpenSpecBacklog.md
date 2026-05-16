@@ -21,10 +21,12 @@ export class SchemaLoadError extends Error {
  * Gets the package's built-in schemas directory path.
  * Uses import.meta.url to resolve relative to the current module.
  * Navigates from src/openspec/artifact-graph/ to project root's openspec/schemas/.
+ * import.meta.url resolves to the .ts source file under src/, so 3 levels up
+ * from artifact-graph/ → openspec/ → src/ → project root.
  */
 export function getPackageSchemasDir(): string {
 	const currentFile = fileURLToPath(import.meta.url);
-	return path.join(path.dirname(currentFile), "..", "..", "..", "..", "openspec", "schemas");
+	return path.join(path.dirname(currentFile), "..", "..", "..", "openspec", "schemas");
 }
 
 /**
