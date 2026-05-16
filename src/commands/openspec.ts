@@ -3,14 +3,15 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { requireProjectRoot } from "../cli.ts";
 import { Core } from "../core/backlog.ts";
 import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
-import { ChangeSchema, SpecSchema } from "../openspec/schemas/index.ts";
+import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
+import { buildDeltaSpecWithEntry, removeDeltaByIndex } from "../openspec/serializers.ts";
 import { DESIGN_TEMPLATE, PROPOSAL_TEMPLATE, SPEC_TEMPLATE } from "../openspec/templates.ts";
 import type { Document } from "../types/index.ts";
 
@@ -289,5 +290,289 @@ export function registerChangeCommand(program: Command): void {
 				}
 				process.exitCode = 1;
 			}
+		});
+
+	// ─── Delta subcommand group ───
+
+	const deltaCmd = changeCmd.command("delta");
+
+	deltaCmd
+		.command("add <change>")
+		.description("add a delta entry to a change's spec file")
+		.requiredOption("--spec <name>", "spec name to target (e.g. user-auth)")
+		.requiredOption("--op <operation>", "delta operation: ADDED, MODIFIED, REMOVED, RENAMED")
+		.option("--req <text>", "requirement text (required for ADDED/MODIFIED/REMOVED; name for RENAMED)")
+		.option("--scenario <text>", "scenario raw text (for ADDED/MODIFIED requirements)")
+		.option("--given <text>", "given context for scenario (auto-generates scenario header)")
+		.option("--when <text>", "when action for scenario")
+		.option("--then <text>", "then outcome for scenario")
+		.option("--rename-from <name>", "original requirement name (for RENAMED)")
+		.option("--rename-to <name>", "new requirement name (for RENAMED)")
+		.action(
+			async (
+				change: string,
+				options: {
+					spec?: string;
+					op?: string;
+					req?: string;
+					scenario?: string;
+					given?: string;
+					when?: string;
+					then?: string;
+					renameFrom?: string;
+					renameTo?: string;
+				},
+			) => {
+				const projectRoot = await requireProjectRoot();
+				const changePath = changeDir(change, projectRoot);
+				const specName = options.spec ?? "";
+
+				if (!existsSync(changePath)) {
+					console.error(`Change "${change}" not found at ${changePath.replace(projectRoot, ".")}`);
+					process.exit(1);
+				}
+
+				if (!specName) {
+					console.error("Missing required option: --spec <name>");
+					process.exit(1);
+				}
+
+				if (!options.op) {
+					console.error("Missing required option: --op ADDED|MODIFIED|REMOVED|RENAMED");
+					process.exit(1);
+				}
+
+				const op = options.op.toUpperCase();
+				const validOps = ["ADDED", "MODIFIED", "REMOVED", "RENAMED"];
+				if (!validOps.includes(op)) {
+					console.error(`Invalid --op: ${options.op}. Must be one of: ${validOps.join(", ")}`);
+					process.exit(1);
+				}
+
+				const operation = op as "ADDED" | "MODIFIED" | "REMOVED" | "RENAMED";
+
+				// Build scenario raw text from --given/--when/--then flags
+				let scenarioRawText = options.scenario ?? "";
+				if (options.given || options.when || options.then) {
+					const parts: string[] = [];
+					if (options.given) parts.push(`GIVEN ${options.given}`);
+					if (options.when) parts.push(`WHEN ${options.when}`);
+					if (options.then) parts.push(`THEN ${options.then}`);
+					scenarioRawText = parts.join("\n");
+				}
+
+				// Validate ADDED/MODIFIED requirements
+				if (operation === "ADDED" || operation === "MODIFIED") {
+					if (!options.req) {
+						console.error(`--req <text> is required for ${operation} deltas`);
+						process.exit(1);
+					}
+
+					if (!scenarioRawText) {
+						console.error(`--scenario or --given/--when/--then is required for ${operation} deltas`);
+						process.exit(1);
+					}
+
+					// Validate against RequirementSchema
+					const reqResult = RequirementSchema.safeParse({
+						text: options.req,
+						scenarios: [{ rawText: scenarioRawText }],
+					});
+
+					if (!reqResult.success) {
+						console.error("Requirement validation failed:");
+						for (const issue of reqResult.error.issues) {
+							console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
+						}
+						process.exit(1);
+					}
+				}
+
+				if (operation === "REMOVED") {
+					if (!options.req) {
+						console.error("--req <name> is required for REMOVED deltas (requirement header name)");
+						process.exit(1);
+					}
+				}
+
+				if (operation === "RENAMED") {
+					if (!options.renameFrom || !options.renameTo) {
+						console.error("--rename-from <name> and --rename-to <name> are required for RENAMED deltas");
+						process.exit(1);
+					}
+				}
+
+				// Ensure specs/<spec>/ directory exists
+				const specDirPath = join(changePath, "specs", specName);
+				await mkdir(specDirPath, { recursive: true });
+
+				const specFilePath = join(specDirPath, "spec.md");
+				const existingContent = existsSync(specFilePath) ? await Bun.file(specFilePath).text() : "";
+
+				const entryName = options.req ?? specName;
+				const newContent = buildDeltaSpecWithEntry(existingContent, {
+					operation,
+					name: entryName,
+					statement: options.req,
+					scenarioRawText,
+					renameFrom: options.renameFrom,
+					renameTo: options.renameTo,
+				});
+
+				await writeFile(specFilePath, newContent, "utf-8");
+				console.log(`Added ${operation} delta "${entryName}" to ${specFilePath.replace(projectRoot, ".")}`);
+			},
+		);
+
+	deltaCmd
+		.command("list <change>")
+		.description("list all deltas in a change, grouped by operation type")
+		.option("--json", "output as JSON for agent consumption")
+		.action(async (change: string, options: { json?: boolean }) => {
+			const projectRoot = await requireProjectRoot();
+			const changePath = changeDir(change, projectRoot);
+
+			if (!existsSync(changePath)) {
+				console.error(`Change "${change}" not found at ${changePath.replace(projectRoot, ".")}`);
+				process.exit(1);
+			}
+
+			const specsDir = join(changePath, "specs");
+			if (!existsSync(specsDir)) {
+				console.log(`No delta specs found for change "${change}".`);
+				return;
+			}
+
+			const specDirs = await readdir(specsDir);
+			let flatIndex = 1;
+			const result: Array<{
+				index: number;
+				operation: string;
+				spec: string;
+				name: string;
+				description: string;
+			}> = [];
+
+			for (const specName of specDirs) {
+				const specFilePath = join(specsDir, specName, "spec.md");
+				if (!existsSync(specFilePath)) continue;
+
+				const content = await Bun.file(specFilePath).text();
+				const deltaPlan = parseDeltaSpec(content);
+				const sections: Array<{ operation: string; entries: Array<{ name: string; description: string }> }> = [
+					{ operation: "ADDED", entries: deltaPlan.added.map((b) => ({ name: b.name, description: b.headerLine })) },
+					{
+						operation: "MODIFIED",
+						entries: deltaPlan.modified.map((b) => ({ name: b.name, description: b.headerLine })),
+					},
+					{
+						operation: "REMOVED",
+						entries: deltaPlan.removed.map((n) => ({ name: n, description: `Remove requirement: ${n}` })),
+					},
+					{
+						operation: "RENAMED",
+						entries: deltaPlan.renamed.map((r) => ({
+							name: `${r.from} → ${r.to}`,
+							description: `Rename from "${r.from}" to "${r.to}"`,
+						})),
+					},
+				];
+
+				for (const section of sections) {
+					for (const entry of section.entries) {
+						result.push({
+							index: flatIndex++,
+							operation: section.operation,
+							spec: specName,
+							name: entry.name,
+							description: entry.description,
+						});
+					}
+				}
+			}
+
+			if (result.length === 0) {
+				console.log(`No deltas found for change "${change}".`);
+				return;
+			}
+
+			if (options.json) {
+				console.log(JSON.stringify(result, null, 2));
+				return;
+			}
+
+			// Grouped plain text output
+			for (const sectionName of ["ADDED", "MODIFIED", "REMOVED", "RENAMED"]) {
+				const entries = result.filter((r) => r.operation === sectionName);
+				if (entries.length === 0) continue;
+
+				console.log(`\n${sectionName} Requirements:`);
+				for (const entry of entries) {
+					console.log(`  ${entry.index}. [${entry.spec}] ${entry.description}`);
+				}
+			}
+		});
+
+	deltaCmd
+		.command("remove <change>")
+		.description("remove a delta entry by its 1-based flat index")
+		.requiredOption("--index <n>", "1-based flat index of the delta to remove (use list to see indices)")
+		.action(async (change: string, options: { index?: string }) => {
+			const projectRoot = await requireProjectRoot();
+			const changePath = changeDir(change, projectRoot);
+
+			if (!existsSync(changePath)) {
+				console.error(`Change "${change}" not found at ${changePath.replace(projectRoot, ".")}`);
+				process.exit(1);
+			}
+
+			if (!options.index) {
+				console.error("Missing required option: --index <n>");
+				process.exit(1);
+			}
+
+			const index = Number.parseInt(options.index, 10);
+			if (Number.isNaN(index) || index < 1) {
+				console.error("--index must be a positive integer");
+				process.exit(1);
+			}
+
+			// Walk through all spec dirs to find the entry by flat index
+			const specsDir = join(changePath, "specs");
+			if (!existsSync(specsDir)) {
+				console.error(`No specs found for change "${change}".`);
+				process.exit(1);
+			}
+
+			const specDirs = await readdir(specsDir);
+			let remaining = index;
+
+			for (const specName of specDirs) {
+				const specFilePath = join(specsDir, specName, "spec.md");
+				if (!existsSync(specFilePath)) continue;
+
+				const content = await Bun.file(specFilePath).text();
+				const deltaPlan = parseDeltaSpec(content);
+				const totalInSpec =
+					deltaPlan.added.length + deltaPlan.modified.length + deltaPlan.removed.length + deltaPlan.renamed.length;
+
+				if (remaining <= totalInSpec) {
+					// Found the spec file containing the target entry
+					const newContent = removeDeltaByIndex(content, remaining);
+					if (newContent === null) {
+						console.error(`Delta at index ${index} not found.`);
+						process.exit(1);
+					}
+
+					await writeFile(specFilePath, newContent, "utf-8");
+					console.log(`Removed delta #${index} from ${specFilePath.replace(projectRoot, ".")}`);
+					return;
+				}
+
+				remaining -= totalInSpec;
+			}
+
+			console.error(`Delta at index ${index} not found.`);
+			process.exit(1);
 		});
 }
