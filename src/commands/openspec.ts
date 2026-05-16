@@ -3,20 +3,14 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Command } from "commander";
-import { parse as parseYaml } from "yaml";
 import { requireProjectRoot } from "../cli.ts";
 import { Core } from "../core/backlog.ts";
-import {
-	ArtifactGraph,
-	ChangeMetadataSchema,
-	detectCompleted,
-	listSchemas,
-	resolveSchema,
-} from "../openspec/artifact-graph/index.ts";
+import { ArtifactGraph, detectCompleted, listSchemas, resolveSchema } from "../openspec/artifact-graph/index.ts";
 import type { SchemaYaml } from "../openspec/artifact-graph/types.ts";
+
 import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
@@ -312,7 +306,7 @@ export function registerChangeCommand(program: Command): void {
 			// Handle missing change dir gracefully
 			if (!existsSync(dir)) {
 				if (options.json) {
-					console.log(JSON.stringify({ changeName: name, schemaName: null, artifacts: [] }));
+					console.log(JSON.stringify({ changeName: name, artifacts: [] }));
 				} else {
 					console.log(`Change "${name}" not found.`);
 					console.log("Run `backlog change create <name>` to scaffold a new change set.");
@@ -320,43 +314,19 @@ export function registerChangeCommand(program: Command): void {
 				return;
 			}
 
-			// Resolve schema name from .openspec.yaml metadata
-			const metadataPath = join(dir, ".openspec.yaml");
-			let schemaName = "spec-driven";
-			if (existsSync(metadataPath)) {
-				try {
-					const metadataContent = await readFile(metadataPath, "utf-8");
-					const parsed = parseYaml(metadataContent);
-					const result = ChangeMetadataSchema.safeParse(parsed);
-					if (result.success) {
-						schemaName = result.data.schema;
-					} else {
-						console.error(`Invalid .openspec.yaml at ${metadataPath.replace(projectRoot, ".")}:`);
-						for (const issue of result.error.issues) {
-							console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
-						}
-						process.exit(1);
-					}
-				} catch (err) {
-					console.error(`Failed to read .openspec.yaml: ${err instanceof Error ? err.message : String(err)}`);
-					process.exit(1);
-				}
-			}
-
-			// Resolve schema
+			// Always use spec-driven schema
 			let schema: SchemaYaml;
 			try {
-				schema = resolveSchema(schemaName, projectRoot);
+				schema = resolveSchema("spec-driven", projectRoot);
 			} catch {
-				// Schema not found
 				const available = listSchemas(projectRoot);
 				if (available.length === 0) {
-					console.error(`Schema "${schemaName}" is not available. No schemas found.`);
+					console.error('Schema "spec-driven" is not available. No schemas found.');
 					console.error(
-						"Create a schema at openspec/schemas/<name>/schema.yaml or install a package with built-in schemas.",
+						"Create a schema at openspec/schemas/spec-driven/schema.yaml or install a package with built-in schemas.",
 					);
 				} else {
-					console.error(`Schema "${schemaName}" not found. Available schemas: ${available.join(", ")}`);
+					console.error(`Schema "spec-driven" not found. Available schemas: ${available.join(", ")}`);
 				}
 				process.exit(1);
 			}
