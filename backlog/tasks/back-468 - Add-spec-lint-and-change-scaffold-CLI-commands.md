@@ -16,6 +16,19 @@ ordinal: 26000
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Add new CLI commands: (1) backlog spec create <name> — scaffolds a new spec at backlog/specs/<name>/spec.md with template. (2) backlog spec validate <name> — parses and validates spec.md against SpecSchema. (3) backlog spec list — lists all specs with requirement counts. (4) backlog change create <name> — scaffolds new change directory with proposal.md + specs/ + design.md. (5) backlog change validate <name> — validates change structure + delta specs. Uses Commander.js subcommands consistent with Backlog.md's existing pattern (like backlog task, backlog board). Register in src/cli.ts.
+
+### Import Sources (updated after BACK-467)
+
+BACK-467 exposes:
+- `parseChange(content)`, `parseChangeFromFile(filePath)` — parse proposal.md
+- `parseSpecDeltas(specName, content)`, `parseSpecDeltasFromFile(specName, filePath)` — parse delta spec files
+- `extractRequirementsSection(content)` — parse ## Requirements into body blocks
+- `parseDeltaSpec(content)` — parse delta sections into DeltaPlan
+
+Async helpers ready for CLI command handlers. No async wrapper needed in this task.
+
+- `spec validate` will need line numbers — use deferred spec-structure.ts parser or findSection line tracking
+- Template scaffolding (spec create, change create) is new logic not covered by BACK-467
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

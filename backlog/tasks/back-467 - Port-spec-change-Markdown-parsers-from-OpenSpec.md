@@ -75,6 +75,21 @@ Relationship to BACK-466: Parsers are independent of the Zod schemas — they ha
 - `buildCodeFenceMask(lines)` → boolean[]
 - `findSection(sections, title)` → Section | undefined (case-insensitive)
 
+### Async Helpers (post-hoc, Socrates-approved for BACK-468)
+
+Added as convenience wrappers so BACK-468 CLI commands can do one-liner file reads:
+- `parseChangeFromFile(filePath)` — async wrapper using `Bun.file().text()` + `parseChange()`
+- `parseSpecDeltasFromFile(specName, filePath)` — async wrapper using `Bun.file().text()` + `parseSpecDeltas()`
+
+### Downstream Task Dependencies
+
+| Task | Uses from BACK-467 | Gap |
+|---|---|---|
+| BACK-468 (spec/change CLI) | `parseChange`, `parseSpecDeltas`, `extractRequirementsSection`, async helpers | Needs line numbers (deferred spec-structure.ts) and template scaffolding |
+| BACK-469 (delta editing) | `parseDeltaSpec`, `parseSpecDeltas`, `extractRequirementsSection` | Needs serializers (write spec.md), not in scope |
+| BACK-470 (schema + DAG) | Nothing directly (depends on BACK-466 Zod schemas) | N/A |
+| BACK-471 (change status) | `parseSpecDeltas` | Needs file I/O for DAG state |
+
 **Test cases (red-green TDD for each AC):**
 
 - #1: RequirementBlock extraction (canonical, mixed-case, no-space-after-###, multiple blocks)

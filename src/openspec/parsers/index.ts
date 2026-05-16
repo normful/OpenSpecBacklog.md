@@ -1,5 +1,10 @@
 export type { ParsedChange, Section } from "./change-parser.ts";
-export { parseChange, parseSpecDeltas } from "./change-parser.ts";
+export {
+	parseChange,
+	parseChangeFromFile,
+	parseSpecDeltas,
+	parseSpecDeltasFromFile,
+} from "./change-parser.ts";
 export type {
 	DeltaPlan,
 	RequirementBlock,

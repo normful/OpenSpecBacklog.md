@@ -403,3 +403,30 @@ export function parseSpecDeltas(specName: string, content: string): Delta[] {
 
 	return deltas;
 }
+
+// ─── Async file-reading convenience helpers ───
+
+/**
+ * Read and parse a change proposal from a file path.
+ * Uses Bun.file() for file I/O.
+ *
+ * @param filePath - Path to the proposal.md file
+ * @returns ParsedChange with why, whatChanges, and deltas
+ */
+export async function parseChangeFromFile(filePath: string): Promise<ParsedChange> {
+	const content = await Bun.file(filePath).text();
+	return parseChange(content);
+}
+
+/**
+ * Read and parse delta sections from a spec.md file.
+ * Uses Bun.file() for file I/O.
+ *
+ * @param specName - The spec name to assign to all resulting deltas
+ * @param filePath - Path to the spec.md file
+ * @returns Array of Delta objects
+ */
+export async function parseSpecDeltasFromFile(specName: string, filePath: string): Promise<Delta[]> {
+	const content = await Bun.file(filePath).text();
+	return parseSpecDeltas(specName, content);
+}
