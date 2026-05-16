@@ -294,6 +294,12 @@
     url = "https://registry.npmjs.org/@jimp/plugin-blit/-/plugin-blit-1.6.0.tgz";
     hash = "sha512-M+uRWl1csi7qilnSK8uxK4RJMSuVeBiO1AY0+7APnfUbQNZm6hCe0CCFv1Iyw1D/Dhb8ph8fQgm5mwM0eSxgVA==";
   };
+  "@jimp/plugin-blit/zod" = {
+    out_path = "@jimp/plugin-blit/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-blur" = {
     out_path = "@jimp/plugin-blur";
     name = "@jimp/plugin-blur@1.6.0";
@@ -306,11 +312,23 @@
     url = "https://registry.npmjs.org/@jimp/plugin-circle/-/plugin-circle-1.6.0.tgz";
     hash = "sha512-xt1Gp+LtdMKAXfDp3HNaG30SPZW6AQ7dtAtTnoRKorRi+5yCJjKqXRgkewS5bvj8DEh87Ko1ydJfzqS3P2tdWw==";
   };
+  "@jimp/plugin-circle/zod" = {
+    out_path = "@jimp/plugin-circle/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-color" = {
     out_path = "@jimp/plugin-color";
     name = "@jimp/plugin-color@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-color/-/plugin-color-1.6.0.tgz";
     hash = "sha512-J5q8IVCpkBsxIXM+45XOXTrsyfblyMZg3a9eAo0P7VPH4+CrvyNQwaYatbAIamSIN1YzxmO3DkIZXzRjFSz1SA==";
+  };
+  "@jimp/plugin-color/zod" = {
+    out_path = "@jimp/plugin-color/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/plugin-contain" = {
     out_path = "@jimp/plugin-contain";
@@ -318,11 +336,23 @@
     url = "https://registry.npmjs.org/@jimp/plugin-contain/-/plugin-contain-1.6.0.tgz";
     hash = "sha512-oN/n+Vdq/Qg9bB4yOBOxtY9IPAtEfES8J1n9Ddx+XhGBYT1/QTU/JYkGaAkIGoPnyYvmLEDqMz2SGihqlpqfzQ==";
   };
+  "@jimp/plugin-contain/zod" = {
+    out_path = "@jimp/plugin-contain/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-cover" = {
     out_path = "@jimp/plugin-cover";
     name = "@jimp/plugin-cover@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-cover/-/plugin-cover-1.6.0.tgz";
     hash = "sha512-Iow0h6yqSC269YUJ8HC3Q/MpCi2V55sMlbkkTTx4zPvd8mWZlC0ykrNDeAy9IJegrQ7v5E99rJwmQu25lygKLA==";
+  };
+  "@jimp/plugin-cover/zod" = {
+    out_path = "@jimp/plugin-cover/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/plugin-crop" = {
     out_path = "@jimp/plugin-crop";
@@ -330,11 +360,23 @@
     url = "https://registry.npmjs.org/@jimp/plugin-crop/-/plugin-crop-1.6.0.tgz";
     hash = "sha512-KqZkEhvs+21USdySCUDI+GFa393eDIzbi1smBqkUPTE+pRwSWMAf01D5OC3ZWB+xZsNla93BDS9iCkLHA8wang==";
   };
+  "@jimp/plugin-crop/zod" = {
+    out_path = "@jimp/plugin-crop/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-displace" = {
     out_path = "@jimp/plugin-displace";
     name = "@jimp/plugin-displace@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-displace/-/plugin-displace-1.6.0.tgz";
     hash = "sha512-4Y10X9qwr5F+Bo5ME356XSACEF55485j5nGdiyJ9hYzjQP9nGgxNJaZ4SAOqpd+k5sFaIeD7SQ0Occ26uIng5Q==";
+  };
+  "@jimp/plugin-displace/zod" = {
+    out_path = "@jimp/plugin-displace/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/plugin-dither" = {
     out_path = "@jimp/plugin-dither";
@@ -348,11 +390,23 @@
     url = "https://registry.npmjs.org/@jimp/plugin-fisheye/-/plugin-fisheye-1.6.0.tgz";
     hash = "sha512-E5QHKWSCBFtpgZarlmN3Q6+rTQxjirFqo44ohoTjzYVrDI6B6beXNnPIThJgPr0Y9GwfzgyarKvQuQuqCnnfbA==";
   };
+  "@jimp/plugin-fisheye/zod" = {
+    out_path = "@jimp/plugin-fisheye/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-flip" = {
     out_path = "@jimp/plugin-flip";
     name = "@jimp/plugin-flip@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-flip/-/plugin-flip-1.6.0.tgz";
     hash = "sha512-/+rJVDuBIVOgwoyVkBjUFHtP+wmW0r+r5OQ2GpatQofToPVbJw1DdYWXlwviSx7hvixTWLKVgRWQ5Dw862emDg==";
+  };
+  "@jimp/plugin-flip/zod" = {
+    out_path = "@jimp/plugin-flip/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/plugin-hash" = {
     out_path = "@jimp/plugin-hash";
@@ -366,11 +420,23 @@
     url = "https://registry.npmjs.org/@jimp/plugin-mask/-/plugin-mask-1.6.0.tgz";
     hash = "sha512-Cwy7ExSJMZszvkad8NV8o/Z92X2kFUFM8mcDAhNVxU0Q6tA0op2UKRJY51eoK8r6eds/qak3FQkXakvNabdLnA==";
   };
+  "@jimp/plugin-mask/zod" = {
+    out_path = "@jimp/plugin-mask/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-print" = {
     out_path = "@jimp/plugin-print";
     name = "@jimp/plugin-print@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-print/-/plugin-print-1.6.0.tgz";
     hash = "sha512-zarTIJi8fjoGMSI/M3Xh5yY9T65p03XJmPsuNet19K/Q7mwRU6EV2pfj+28++2PV2NJ+htDF5uecAlnGyxFN2A==";
+  };
+  "@jimp/plugin-print/zod" = {
+    out_path = "@jimp/plugin-print/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/plugin-quantize" = {
     out_path = "@jimp/plugin-quantize";
@@ -378,11 +444,23 @@
     url = "https://registry.npmjs.org/@jimp/plugin-quantize/-/plugin-quantize-1.6.0.tgz";
     hash = "sha512-EmzZ/s9StYQwbpG6rUGBCisc3f64JIhSH+ncTJd+iFGtGo0YvSeMdAd+zqgiHpfZoOL54dNavZNjF4otK+mvlg==";
   };
+  "@jimp/plugin-quantize/zod" = {
+    out_path = "@jimp/plugin-quantize/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-resize" = {
     out_path = "@jimp/plugin-resize";
     name = "@jimp/plugin-resize@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-resize/-/plugin-resize-1.6.0.tgz";
     hash = "sha512-uSUD1mqXN9i1SGSz5ov3keRZ7S9L32/mAQG08wUwZiEi5FpbV0K8A8l1zkazAIZi9IJzLlTauRNU41Mi8IF9fA==";
+  };
+  "@jimp/plugin-resize/zod" = {
+    out_path = "@jimp/plugin-resize/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/plugin-rotate" = {
     out_path = "@jimp/plugin-rotate";
@@ -390,17 +468,35 @@
     url = "https://registry.npmjs.org/@jimp/plugin-rotate/-/plugin-rotate-1.6.0.tgz";
     hash = "sha512-JagdjBLnUZGSG4xjCLkIpQOZZ3Mjbg8aGCCi4G69qR+OjNpOeGI7N2EQlfK/WE8BEHOW5vdjSyglNqcYbQBWRw==";
   };
+  "@jimp/plugin-rotate/zod" = {
+    out_path = "@jimp/plugin-rotate/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/plugin-threshold" = {
     out_path = "@jimp/plugin-threshold";
     name = "@jimp/plugin-threshold@1.6.0";
     url = "https://registry.npmjs.org/@jimp/plugin-threshold/-/plugin-threshold-1.6.0.tgz";
     hash = "sha512-M59m5dzLoHOVWdM41O8z9SyySzcDn43xHseOH0HavjsfQsT56GGCC4QzU1banJidbUrePhzoEdS42uFE8Fei8w==";
   };
+  "@jimp/plugin-threshold/zod" = {
+    out_path = "@jimp/plugin-threshold/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+  };
   "@jimp/types" = {
     out_path = "@jimp/types";
     name = "@jimp/types@1.6.0";
     url = "https://registry.npmjs.org/@jimp/types/-/types-1.6.0.tgz";
     hash = "sha512-7UfRsiKo5GZTAATxm2qQ7jqmUXP0DxTArztllTcYdyw6Xi5oT4RaoXynVtCD4UyLK5gJgkZJcwonoijrhYFKfg==";
+  };
+  "@jimp/types/zod" = {
+    out_path = "@jimp/types/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@jimp/utils" = {
     out_path = "@jimp/utils";
@@ -449,6 +545,12 @@
     name = "@modelcontextprotocol/sdk@1.29.0";
     url = "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.29.0.tgz";
     hash = "sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==";
+  };
+  "@modelcontextprotocol/sdk/zod" = {
+    out_path = "@modelcontextprotocol/sdk/node_modules/zod";
+    name = "zod@3.25.76";
+    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
+    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
   };
   "@parcel/watcher" = {
     out_path = "@parcel/watcher";
@@ -4022,9 +4124,9 @@
   };
   "zod" = {
     out_path = "zod";
-    name = "zod@3.25.76";
-    url = "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz";
-    hash = "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
+    name = "zod@4.4.3";
+    url = "https://registry.npmjs.org/zod/-/zod-4.4.3.tgz";
+    hash = "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==";
   };
   "zod-to-json-schema" = {
     out_path = "zod-to-json-schema";
