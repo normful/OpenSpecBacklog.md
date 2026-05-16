@@ -1801,7 +1801,8 @@ function printSearchResults(results: SearchResult[]): void {
 		for (const documentResult of documents) {
 			const { document } = documentResult;
 			const scoreText = formatScore(documentResult.score);
-			console.log(`  ${document.id} - ${document.title}${scoreText}`);
+			const statusText = document.status ? ` (${document.status})` : "";
+			console.log(`  ${document.id} - ${document.title}${statusText}${scoreText}`);
 		}
 		printed = true;
 	}
@@ -3141,11 +3142,25 @@ docCmd
 
 docCmd
 	.command("list")
+	.option("-s, --status <status>", "filter by document status (draft, published, archived)")
 	.option("--plain", "use plain text output instead of interactive UI")
 	.action(async (options) => {
 		const cwd = await requireProjectRoot();
 		const core = new Core(cwd);
-		const docs = await core.filesystem.listDocuments();
+		let docs = await core.filesystem.listDocuments();
+
+		// Apply status filter
+		if (options.status) {
+			const normalized = String(options.status).toLowerCase();
+			const validStatuses = ["draft", "published", "archived"];
+			if (!(validStatuses as readonly string[]).includes(normalized)) {
+				console.error(`Invalid status: ${options.status}. Valid values are: draft, published, archived`);
+				process.exitCode = 1;
+				return;
+			}
+			docs = docs.filter((d) => d.status?.toLowerCase() === normalized);
+		}
+
 		if (docs.length === 0) {
 			console.log("No docs found.");
 			return;
@@ -3155,7 +3170,8 @@ docCmd
 		const usePlainOutput = isPlainRequested(options) || shouldAutoPlain;
 		if (usePlainOutput) {
 			for (const d of docs) {
-				console.log(`${d.id} - ${d.title}`);
+				const statusText = d.status ? ` (${d.status})` : "";
+				console.log(`${d.id} - ${d.title}${statusText}`);
 			}
 			return;
 		}
