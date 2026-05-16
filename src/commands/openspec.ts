@@ -15,6 +15,7 @@ import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
 import { buildDeltaSpecWithEntry, removeDeltaByIndex } from "../openspec/serializers.ts";
+import { syncSpecs } from "../openspec/sync.ts";
 import { DESIGN_TEMPLATE, PROPOSAL_TEMPLATE, SPEC_TEMPLATE } from "../openspec/templates.ts";
 import type { Document } from "../types/index.ts";
 
@@ -65,11 +66,17 @@ function validateSpecContent(content: string, name: string): string[] {
 		name,
 		overview: purposeText,
 		requirements: requirementsSection.bodyBlocks.map((block) => {
+			// Extract requirement text from the first non-header content line,
+			// falling back to the header name if no content follows.
+			const lines = block.raw.split("\n").filter((l) => l.trim());
+			const firstLine = lines.length > 1 ? lines[1]!.trim() : "";
+			const text = firstLine || block.name;
+
 			const scenarioTexts = (block.raw.match(/#### Scenario:.*\n([\s\S]*?)(?=\n#### |\n### |$)/gi) ?? []).map((s) =>
 				s.replace(/^#### Scenario:.*\n/i, "").trim(),
 			);
 			return {
-				text: block.name,
+				text,
 				scenarios: scenarioTexts.map((rawText: string) => ({ rawText })),
 			};
 		}),
@@ -405,6 +412,18 @@ export function registerChangeCommand(program: Command): void {
 				console.log("");
 				console.log("All artifacts complete!");
 			}
+		});
+
+	// ─── Sync subcommand ───
+
+	changeCmd
+		.command("sync <name>")
+		.description("sync delta specs to main spec files")
+		.option("--dry-run", "show what would happen without writing")
+		.action(async (name: string, options: { dryRun?: boolean }) => {
+			const projectRoot = await requireProjectRoot();
+			const summary = await syncSpecs(name, projectRoot, { dryRun: options.dryRun ?? false });
+			console.log(summary);
 		});
 
 	// ─── Delta subcommand group ───
