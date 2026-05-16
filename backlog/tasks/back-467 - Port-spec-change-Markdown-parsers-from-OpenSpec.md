@@ -1,7 +1,7 @@
 ---
 id: BACK-467
 title: Port spec/change Markdown parsers from OpenSpec
-status: In Progress
+status: Done
 created_date: '2026-05-15 21:03'
 labels: []
 deps:

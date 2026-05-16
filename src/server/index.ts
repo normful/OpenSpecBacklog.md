@@ -359,7 +359,7 @@ export class BacklogServer {
 						PUT: async (req: Request) => await this.handleUpdateConfig(req),
 					},
 					"/api/docs": {
-						GET: async () => await this.handleListDocs(),
+						GET: async (req: Request) => await this.handleListDocs(req),
 						POST: async (req: Request) => await this.handleCreateDoc(req),
 					},
 					"/api/doc/:id": {
@@ -1037,11 +1037,16 @@ export class BacklogServer {
 	}
 
 	// Documentation handlers
-	private async handleListDocs(): Promise<Response> {
+	private async handleListDocs(req: Request): Promise<Response> {
 		try {
+			const url = new URL(req.url);
+			const statusFilter = url.searchParams.get("status") || undefined;
 			const store = await this.getContentStoreInstance();
-			const docs = store.getDocuments();
-			const docFiles = docs.map((doc) => ({
+			const allDocs = store.getDocuments();
+			const filtered = statusFilter
+				? allDocs.filter((doc) => doc.status?.toLowerCase() === statusFilter.toLowerCase())
+				: allDocs;
+			const docs = filtered.map((doc) => ({
 				name: doc.path?.split(/[\\/]+/).pop() ?? `${doc.title}.md`,
 				id: doc.id,
 				title: doc.title,
@@ -1050,10 +1055,10 @@ export class BacklogServer {
 				createdDate: doc.createdDate,
 				updatedDate: doc.updatedDate,
 				lastModified: doc.updatedDate || doc.createdDate,
-				ttttstatus: doc.status ?? null,
+				status: doc.status ?? null,
 				tags: doc.tags || [],
 			}));
-			return Response.json(docFiles);
+			return Response.json(docs);
 		} catch (error) {
 			console.error("Error listing documents:", error);
 			return Response.json([]);

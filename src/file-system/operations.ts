@@ -846,7 +846,7 @@ export class FileSystem {
 		}
 	}
 
-	async listDocuments(): Promise<Document[]> {
+	async listDocuments(status?: string): Promise<Document[]> {
 		try {
 			const docsDir = await this.getDocsDir();
 			// Recursively include all markdown files under docs, excluding README.md variants
@@ -860,10 +860,13 @@ export class FileSystem {
 				const filepath = join(docsDir, ...relativePath.split("/"));
 				const content = await Bun.file(filepath).text();
 				const parsed = parseDocument(content);
-				docs.push({
+				const doc: Document = {
 					...parsed,
 					path: relativePath,
-				});
+				};
+				if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
+					docs.push(doc);
+				}
 			}
 
 			// Stable sort by title for UI/CLI listing

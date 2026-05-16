@@ -35,6 +35,7 @@ interface TaskSearchEntity extends BaseSearchEntity {
 interface DocumentSearchEntity extends BaseSearchEntity {
 	readonly type: "document";
 	readonly document: Document;
+	readonly statusLower: string;
 }
 
 interface DecisionSearchEntity extends BaseSearchEntity {
@@ -187,6 +188,10 @@ export class SearchService {
 				continue;
 			}
 
+			if (entity.type === "document" && !this.matchesDocumentFilters(entity, normalizedFilters)) {
+				continue;
+			}
+
 			results.push(this.mapEntityToResult(entity, result));
 			if (limit && results.length >= limit) {
 				break;
@@ -240,6 +245,7 @@ export class SearchService {
 			title: document.title,
 			bodyText: document.rawContent ?? "",
 			document,
+			statusLower: (document.status ?? "").toLowerCase(),
 		}));
 
 		this.decisions = decisions.map((decision) => ({
@@ -295,7 +301,8 @@ export class SearchService {
 		}
 
 		if (allowedTypes.has("document")) {
-			for (const entity of this.documents) {
+			const documents = this.applyDocumentFilters(this.documents, filters);
+			for (const entity of documents) {
 				results.push(this.mapEntityToResult(entity));
 				if (limit && results.length >= limit) {
 					return results;
@@ -313,6 +320,15 @@ export class SearchService {
 		}
 
 		return results;
+	}
+
+	private applyDocumentFilters(documents: DocumentSearchEntity[], filters: NormalizedFilters): DocumentSearchEntity[] {
+		let filtered = documents;
+		if (filters.statuses && filters.statuses.length > 0) {
+			const allowedStatuses = new Set(filters.statuses);
+			filtered = filtered.filter((doc) => allowedStatuses.has(doc.statusLower));
+		}
+		return filtered;
 	}
 
 	private applyTaskFilters(tasks: TaskSearchEntity[], filters: NormalizedFilters): TaskSearchEntity[] {
@@ -393,6 +409,15 @@ export class SearchService {
 			return false;
 		}
 
+		return true;
+	}
+
+	private matchesDocumentFilters(document: DocumentSearchEntity, filters: NormalizedFilters): boolean {
+		if (filters.statuses && filters.statuses.length > 0) {
+			if (!filters.statuses.includes(document.statusLower)) {
+				return false;
+			}
+		}
 		return true;
 	}
 

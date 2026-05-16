@@ -11,6 +11,11 @@ export const documentListSchema: JsonSchema = {
 			type: "string",
 			maxLength: 200,
 		},
+		status: {
+			type: "string",
+			maxLength: 20,
+			enum: [...DOCUMENT_STATUS_ENUM],
+		},
 	},
 	required: [],
 	additionalProperties: false,

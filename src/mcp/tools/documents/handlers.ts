@@ -6,6 +6,7 @@ import { formatDocumentCallResult } from "../../utils/document-response.ts";
 
 export type DocumentListArgs = {
 	search?: string;
+	status?: Document["status"];
 };
 
 export type DocumentViewArgs = {
@@ -77,7 +78,7 @@ export class DocumentHandlers {
 
 	async listDocuments(args: DocumentListArgs = {}): Promise<CallToolResult> {
 		const search = args.search?.toLowerCase();
-		const documents = await this.core.filesystem.listDocuments();
+		const documents = await this.core.filesystem.listDocuments(args.status);
 
 		const filtered =
 			search && search.length > 0
