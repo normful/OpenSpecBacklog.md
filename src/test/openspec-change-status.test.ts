@@ -7,7 +7,7 @@
 import { describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ArtifactGraph, ChangeMetadataSchema, detectCompleted } from "../openspec/artifact-graph/index.ts";
+import { ArtifactGraph, detectCompleted } from "../openspec/artifact-graph/index.ts";
 import type { SchemaYaml } from "../openspec/artifact-graph/types.ts";
 
 // ─── Test helpers ───
@@ -125,9 +125,9 @@ describe("change status — artifact state computation", () => {
 				{ id: "specs", generates: "specs/spec.md", template: "specs.md", requires: ["proposal"] },
 				{ id: "design", generates: "design.md", template: "design.md", requires: ["proposal"] },
 				{
-					id: "tasks",
-					generates: "tasks.md",
-					template: "tasks.md",
+					id: "review",
+					generates: "review.md",
+					template: "review.md",
 					requires: ["specs", "design"],
 				},
 			]),
@@ -140,7 +140,7 @@ describe("change status — artifact state computation", () => {
 			{ id: "proposal", status: "done" },
 			{ id: "specs", status: "done" },
 			{ id: "design", status: "done" },
-			{ id: "tasks", status: "ready" },
+			{ id: "review", status: "ready" },
 		]);
 
 		cleanupDir(dir);
@@ -205,51 +205,7 @@ describe("change status — artifact state computation", () => {
 	});
 });
 
-// ─── ChangeMetadataSchema tests ───
-
-describe("ChangeMetadataSchema", () => {
-	const validMetadata = {
-		schema: "spec-driven",
-		created: "2026-05-16",
-		goal: "Add user authentication",
-		affected_areas: ["auth", "api"],
-	};
-
-	it("accepts valid metadata", () => {
-		const result = ChangeMetadataSchema.safeParse(validMetadata);
-		expect(result.success).toBe(true);
-	});
-
-	it("rejects missing schema", () => {
-		const result = ChangeMetadataSchema.safeParse({ created: "2026-05-16" });
-		expect(result.success).toBe(false);
-	});
-
-	it("rejects bad date format", () => {
-		const result = ChangeMetadataSchema.safeParse({
-			schema: "spec-driven",
-			created: "2026/05/16",
-		});
-		expect(result.success).toBe(false);
-	});
-
-	it("accepts minimal metadata (schema + created only)", () => {
-		const result = ChangeMetadataSchema.safeParse({
-			schema: "spec-driven",
-			created: "2026-05-16",
-		});
-		expect(result.success).toBe(true);
-	});
-
-	it("accepts empty affected_areas with goal", () => {
-		const result = ChangeMetadataSchema.safeParse({
-			schema: "spec-driven",
-			created: "2026-05-16",
-			goal: "Do something",
-		});
-		expect(result.success).toBe(true);
-	});
-});
+// ─── JSON output shape tests ───
 
 // ─── JSON output shape tests ───
 
@@ -299,13 +255,11 @@ describe("change status — JSON output shape", () => {
 	it("empty artifacts array for missing change dir", () => {
 		const output = {
 			changeName: "nonexistent",
-			schemaName: null,
 			artifacts: [],
 		};
 		const json = JSON.stringify(output);
 		const parsed = JSON.parse(json);
 		expect(parsed.artifacts).toEqual([]);
-		expect(parsed.schemaName).toBeNull();
 	});
 });
 
