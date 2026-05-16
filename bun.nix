@@ -2661,6 +2661,15 @@
     url = "https://registry.npmjs.org/lint-staged/-/lint-staged-16.4.0.tgz";
     hash = "sha512-lBWt8hujh/Cjysw5GYVmZpFHXDCgZzhrOm8vbcUdobADZNOK/bRshr2kM3DfgrrtR1DQhfupW9gnIXOfiFi+bw==";
   };
+  "lint-staged/yaml" = {
+    out_path = "lint-staged/node_modules/yaml";
+    binaries = {
+      "yaml" = "../lint-staged/node_modules/yaml/bin.mjs";
+    };
+    name = "yaml@2.8.3";
+    url = "https://registry.npmjs.org/yaml/-/yaml-2.8.3.tgz";
+    hash = "sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==";
+  };
   "listr2" = {
     out_path = "listr2";
     name = "listr2@9.0.5";
@@ -4118,9 +4127,9 @@
     binaries = {
       "yaml" = "../yaml/bin.mjs";
     };
-    name = "yaml@2.8.3";
-    url = "https://registry.npmjs.org/yaml/-/yaml-2.8.3.tgz";
-    hash = "sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==";
+    name = "yaml@2.9.0";
+    url = "https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz";
+    hash = "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==";
   };
   "zod" = {
     out_path = "zod";
