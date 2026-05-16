@@ -16,7 +16,7 @@ import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/
 import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
 import { buildDeltaSpecWithEntry, removeDeltaByIndex } from "../openspec/serializers.ts";
 import { syncSpecs } from "../openspec/sync.ts";
-import { DESIGN_TEMPLATE, PROPOSAL_TEMPLATE, SPEC_TEMPLATE } from "../openspec/templates.ts";
+import { PROPOSAL_TEMPLATE, SPEC_TEMPLATE } from "../openspec/templates.ts";
 import type { Document } from "../types/index.ts";
 
 /**
@@ -35,14 +35,9 @@ export function findLineNumber(content: string, text: string): number {
 }
 
 /**
- * Build a spec directory path relative to project root.
- */
-function specDir(name: string, projectRoot: string): string {
-	return join(projectRoot, "backlog", "specs", name);
-}
-
-/**
  * Build a change directory path relative to project root.
+ * Changes still write delta specs (specs/<name>/spec.md) to this dir.
+ * The proposal and design content are now Documents in backlog/docs/.
  */
 function changeDir(name: string, projectRoot: string): string {
 	return join(projectRoot, "backlog", "changes", name);
@@ -69,7 +64,7 @@ function validateSpecContent(content: string, name: string): string[] {
 			// Extract requirement text from the first non-header content line,
 			// falling back to the header name if no content follows.
 			const lines = block.raw.split("\n").filter((l) => l.trim());
-			const firstLine = lines.length > 1 ? lines[1]!.trim() : "";
+			const firstLine = lines.length > 1 ? lines[1]?.trim() : "";
 			const text = firstLine || block.name;
 
 			const scenarioTexts = (block.raw.match(/#### Scenario:.*\n([\s\S]*?)(?=\n#### |\n### |$)/gi) ?? []).map((s) =>
@@ -96,7 +91,7 @@ function validateSpecContent(content: string, name: string): string[] {
 }
 
 /**
- * Validate change proposal.md content against ChangeSchema.
+ * Validate change proposal content against ChangeSchema.
  * Returns array of error strings (empty = valid).
  */
 async function validateChangeContent(content: string, changeName: string, projectRoot: string): Promise<string[]> {
@@ -168,20 +163,28 @@ export function registerSpecCommand(program: Command): void {
 
 	specCmd
 		.command("create <name>")
-		.description("scaffold a new spec document")
+		.description("scaffold a new spec document in backlog/docs/")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
-			const dir = specDir(name, projectRoot);
-			const filePath = join(dir, "spec.md");
+			const core = new Core(projectRoot);
 
-			if (existsSync(filePath)) {
-				console.error(`Spec already exists at ${filePath.replace(projectRoot, ".")}`);
+			// Check for existing spec with same title
+			const existing = await core.filesystem.listDocuments();
+			const duplicate = existing.find(
+				(d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "specification",
+			);
+			if (duplicate) {
+				console.error(`Spec "${name}" already exists as document ${duplicate.id} in backlog/docs/`);
 				process.exit(1);
 			}
 
-			await mkdir(dir, { recursive: true });
-			await Bun.write(filePath, SPEC_TEMPLATE);
-			console.log(`Created spec at ${filePath.replace(projectRoot, ".")}`);
+			const doc = await core.createDocumentFromInput({
+				title: name,
+				type: "specification",
+				status: "draft",
+				content: SPEC_TEMPLATE,
+			});
+			console.log(`Created spec "${name}" as document ${doc.id} in backlog/docs/`);
 		});
 
 	specCmd
@@ -189,14 +192,16 @@ export function registerSpecCommand(program: Command): void {
 		.description("validate a spec document against SpecSchema")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
-			const filePath = join(specDir(name, projectRoot), "spec.md");
+			const core = new Core(projectRoot);
 
-			if (!existsSync(filePath)) {
-				console.error(`Spec not found at ${filePath.replace(projectRoot, ".")}`);
+			const docs = await core.filesystem.listDocuments();
+			const spec = docs.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "specification");
+			if (!spec) {
+				console.error(`Spec "${name}" not found in backlog/docs/.`);
 				process.exit(1);
 			}
 
-			const content = await Bun.file(filePath).text();
+			const content = spec.rawContent;
 			const errors = validateSpecContent(content, name);
 
 			if (errors.length === 0) {
@@ -256,23 +261,28 @@ export function registerChangeCommand(program: Command): void {
 		.description("scaffold a new change set")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
+			const core = new Core(projectRoot);
 			const dir = changeDir(name, projectRoot);
 
 			if (existsSync(dir)) {
-				console.error(`Change already exists at ${dir.replace(projectRoot, ".")}`);
+				console.error(`Change "${name}" already exists at ${dir.replace(projectRoot, ".")}`);
 				process.exit(1);
 			}
 
+			// Create proposal as a Document (type: other) in backlog/docs/
+			const doc = await core.createDocumentFromInput({
+				title: `Change: ${name}`,
+				type: "other",
+				status: "draft",
+				content: PROPOSAL_TEMPLATE,
+			});
+
+			// Still create backlog/changes/<name>/ for delta specs and DAG files
 			const specsDir = join(dir, "specs");
 			await mkdir(specsDir, { recursive: true });
 
-			// Write proposal.md
-			await Bun.write(join(dir, "proposal.md"), PROPOSAL_TEMPLATE);
-
-			// Write design.md
-			await Bun.write(join(dir, "design.md"), DESIGN_TEMPLATE);
-
-			console.log(`Created change at ${dir.replace(projectRoot, ".")}`);
+			console.log(`Created change "${name}" as document ${doc.id} in backlog/docs/`);
+			console.log(`  Delta specs: ${specsDir.replace(projectRoot, ".")}`);
 		});
 
 	changeCmd
@@ -280,15 +290,20 @@ export function registerChangeCommand(program: Command): void {
 		.description("validate a change set")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
-			const dir = changeDir(name, projectRoot);
-			const proposalPath = join(dir, "proposal.md");
+			const core = new Core(projectRoot);
 
-			if (!existsSync(proposalPath)) {
-				console.error(`Change proposal not found at ${proposalPath.replace(projectRoot, ".")}`);
+			// Read proposal content from the Document in backlog/docs/
+			const docs = await core.filesystem.listDocuments();
+			const changeDoc = docs.find(
+				(d) => d.title.toLowerCase() === `change: ${name}`.toLowerCase() && d.type === "other",
+			);
+			if (!changeDoc) {
+				console.error(`Change proposal "${name}" not found in backlog/docs/.`);
+				console.error("Run `backlog change create <name>` to scaffold a new change set.");
 				process.exit(1);
 			}
 
-			const content = await Bun.file(proposalPath).text();
+			const content = changeDoc.rawContent;
 			const errors = await validateChangeContent(content, name, projectRoot);
 
 			if (errors.length === 0) {
