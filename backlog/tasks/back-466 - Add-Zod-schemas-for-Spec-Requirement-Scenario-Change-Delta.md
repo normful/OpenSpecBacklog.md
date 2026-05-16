@@ -1,6 +1,6 @@
 id: BACK-466
 title: 'Add Zod schemas for Spec, Requirement, Scenario, Change, Delta'
-status: In Progress
+status: Done
 created_date: '2026-05-15 21:02'
 labels: []
 deps: []
@@ -14,21 +14,21 @@ Header level note: Spec/change/delta files live in backlog/specs/<name>/spec.md 
 <!-- SECTION:DESCRIPTION:END -->
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 zod@^4 added as a runtime dep
-- [ ] #2 SpecSchema validates non-empty name, non-empty overview, min 1 requirement
-- [ ] #3 RequirementSchema enforces SHALL/MUST keyword presence via .refine()
-- [ ] #4 RequirementSchema enforces min 1 scenario
-- [ ] #5 ScenarioSchema: rawText: string (matches OpenSpec)
-- [ ] #6 DeltaSchema: requirements[] only (always array, simplified from OpenSpec's dual requirement? + requirements[]?)
-- [ ] #7 DeltaSchema: rename?: { from: string; to: string } for RENAMED ops (matches OpenSpec)
-- [ ] #8 ChangeSchema enforces why section length bounds (min 50, max 1000) and max 10 deltas
-- [ ] #9 Validation thresholds have hardcoded defaults, overridable via BacklogConfig.validation section
-- [ ] #10 All schemas export TypeScript types via z.infer<> aliases
-- [ ] #11 Schemas are at src/openspec/schemas/ with individual files + barrel index.ts
-- [ ] #12 bun run check . passes on new files
+- [x] #1 zod@^4 added as a runtime dep
+- [x] #2 SpecSchema validates non-empty name, non-empty overview, min 1 requirement
+- [x] #3 RequirementSchema enforces SHALL/MUST keyword presence via .refine()
+- [x] #4 RequirementSchema enforces min 1 scenario
+- [x] #5 ScenarioSchema: rawText: string (matches OpenSpec)
+- [x] #6 DeltaSchema: requirements[] only (always array, simplified from OpenSpec's dual requirement? + requirements[]?)
+- [x] #7 DeltaSchema: rename?: { from: string; to: string } for RENAMED ops (matches OpenSpec)
+- [x] #8 ChangeSchema enforces why section length bounds (min 50, max 1000) and max 10 deltas
+- [x] #9 Validation thresholds have hardcoded defaults, overridable via BacklogConfig.validation section
+- [x] #10 All schemas export TypeScript types via z.infer<> aliases
+- [x] #11 Schemas are at src/openspec/schemas/ with individual files + barrel index.ts
+- [x] #12 bun run check . passes on new files
 <!-- DOD:BEGIN -->
-- [ ] #1 bunx tsc --noEmit passes when TypeScript touched
-- [ ] #2 bun run check . passes when formatting/linting touched
-- [ ] #3 bun test (or scoped test) passes
-- [ ] #4 bun test passes
-- [ ] #5 bun run check . passes
+- [x] #1 bunx tsc --noEmit passes when TypeScript touched
+- [x] #2 bun run check . passes when formatting/linting touched
+- [x] #3 bun test (or scoped test) passes
+- [x] #4 bun test passes
+- [x] #5 bun run check . passes
