@@ -65,28 +65,4 @@ artifacts:
     requires:
       - proposal
 
-  - id: tasks
-    generates: tasks.md
-    description: Implementation checklist with trackable tasks
-    template: tasks.md
-    instruction: |
-      Create the task list that breaks down the implementation work.
 
-      Guidelines:
-      - Group related tasks under ## numbered headings
-      - Each task MUST be a checkbox: `- [ ] X.Y Task description`
-      - Tasks should be small enough to complete in one session
-      - Order tasks by dependency (what must be done first?)
-
-      Reference specs for what needs to be built, design for how to build it.
-      Each task should be verifiable — you know when it's done.
-    requires:
-      - specs
-      - design
-
-apply:
-  requires: [tasks]
-  tracks: tasks.md
-  instruction: |
-    Read context files, work through pending tasks, mark complete as you go.
-    Pause if you hit blockers or need clarification.
