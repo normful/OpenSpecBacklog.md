@@ -2392,12 +2392,14 @@ export class Core {
 		const subPath = normalizeDocumentSubPath(input.path);
 		const tags = normalizeStringList(input.tags);
 		const type = normalizeDocumentTypeInput(input.type) ?? "other";
+		const status = input.status;
 		const document = await this.withCreateLock(async () => {
 			const id = normalizeDocumentId(await generateNextDocId(this));
 			const document: Document = {
 				id,
 				title,
 				type,
+				status,
 				createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
 				rawContent: input.content ?? "",
 				...(tags && tags.length > 0 && { tags }),
@@ -2423,6 +2425,7 @@ export class Core {
 
 		const tags = input.tags !== undefined ? normalizeStringList(input.tags) : existingDoc.tags;
 		const type = normalizeDocumentTypeInput(input.type) ?? existingDoc.type;
+		const status = input.status !== undefined ? input.status : existingDoc.status;
 		const subPath =
 			input.path === undefined
 				? getDocumentSubPathFromRelativePath(existingDoc.path)
@@ -2432,6 +2435,7 @@ export class Core {
 			id: normalizeDocumentId(existingDoc.id),
 			title: normalizedTitle ?? existingDoc.title,
 			type,
+			status: status ?? undefined,
 			rawContent: input.content,
 			updatedDate: new Date().toISOString().slice(0, 16).replace("T", " "),
 			tags: tags && tags.length > 0 ? tags : undefined,

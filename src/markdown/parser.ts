@@ -214,10 +214,18 @@ export function parseDecision(content: string): Decision {
 export function parseDocument(content: string): Document {
 	const { frontmatter, content: rawContent } = parseMarkdown(content);
 
+	const rawStatus = frontmatter.status ? String(frontmatter.status).toLowerCase() : undefined;
+	const validStatuses = ["draft", "published", "archived"] as const;
+	const status =
+		rawStatus && (validStatuses as readonly string[]).includes(rawStatus)
+			? (rawStatus as Document["status"])
+			: undefined;
+
 	return {
 		id: String(frontmatter.id || ""),
 		title: String(frontmatter.title || ""),
 		type: String(frontmatter.type || "other") as Document["type"],
+		status,
 		createdDate: normalizeDate(frontmatter.created_date),
 		updatedDate: frontmatter.updated_date ? normalizeDate(frontmatter.updated_date) : undefined,
 		rawContent,

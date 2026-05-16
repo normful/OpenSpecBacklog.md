@@ -12,6 +12,7 @@ import { MilestoneHandlers } from "../mcp/tools/milestones/handlers.ts";
 import {
 	DOCUMENT_TYPE_VALUES,
 	type Document,
+	type DocumentStatus,
 	type SearchPriorityFilter,
 	type SearchResultType,
 	type Task,
@@ -69,6 +70,27 @@ function parseCreateDocumentPath(value: unknown): string | undefined {
 	return value;
 }
 
+const DOCUMENT_STATUS_VALUES = ["draft", "published", "archived"] as const;
+
+function parseDocumentStatus(value: unknown): DocumentStatus | null | undefined {
+	if (value === undefined) {
+		return undefined;
+	}
+	if (value === null) {
+		return null;
+	}
+	if (typeof value !== "string") {
+		throw new DocumentPayloadValidationError("Document status must be a string or null.");
+	}
+	const normalized = value.toLowerCase();
+	if (!(DOCUMENT_STATUS_VALUES as readonly string[]).includes(normalized)) {
+		throw new DocumentPayloadValidationError(
+			`Document status must be one of: ${DOCUMENT_STATUS_VALUES.join(", ")} or null.`,
+		);
+	}
+	return normalized as (typeof DOCUMENT_STATUS_VALUES)[number];
+}
+
 function parseUpdateDocumentPath(value: unknown): string | null | undefined {
 	if (value === undefined) {
 		return undefined;
@@ -84,6 +106,7 @@ function isDocumentValidationError(error: Error): boolean {
 		error instanceof DocumentPayloadValidationError ||
 		error.message.startsWith("Document type ") ||
 		error.message.startsWith("Document path ") ||
+		error.message.startsWith("Document status ") ||
 		error.message === "Title is required to create a document." ||
 		error.message === "Document title cannot be empty."
 	);
@@ -1058,6 +1081,8 @@ export class BacklogServer {
 				return Response.json({ error: "Document title is required" }, { status: 400 });
 			}
 			const type = parseDocumentType(body?.type);
+			const rawStatus = parseDocumentStatus(body?.status);
+			const status = rawStatus === null ? undefined : rawStatus;
 			const path = parseCreateDocumentPath(body?.path);
 			const tags = parseDocumentTags(body?.tags);
 
@@ -1065,6 +1090,7 @@ export class BacklogServer {
 				title,
 				content: typeof body?.content === "string" ? body.content : "",
 				type,
+				status,
 				path,
 				tags,
 			});
@@ -1088,6 +1114,7 @@ export class BacklogServer {
 			const title = typeof body?.title === "string" ? body.title : undefined;
 			const path = parseUpdateDocumentPath(body?.path);
 			const type = parseDocumentType(body?.type);
+			const status = parseDocumentStatus(body?.status);
 			const tags = parseDocumentTags(body?.tags);
 
 			if (typeof content !== "string") {
@@ -1107,6 +1134,7 @@ export class BacklogServer {
 				id: docId,
 				content,
 				...(normalizedTitle && { title: normalizedTitle }),
+				...(status !== undefined && { status }),
 				...(path !== undefined && { path }),
 				...(type !== undefined && { type }),
 				...(tags !== undefined && { tags }),

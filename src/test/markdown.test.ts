@@ -366,6 +366,44 @@ Document body.`;
 			expect(doc.createdDate).toBe("2025-06-07");
 			expect(doc.tags).toEqual(["api"]);
 			expect(doc.rawContent).toBe("Document body.");
+			expect(doc.status).toBeUndefined();
+		});
+
+		it("should parse document with status", () => {
+			const content = `---
+id: doc-2
+title: "Published Guide"
+type: "guide"
+status: published
+created_date: 2025-06-08
+---
+
+Published content.`;
+
+			const doc = parseDocument(content);
+
+			expect(doc.id).toBe("doc-2");
+			expect(doc.title).toBe("Published Guide");
+			expect(doc.status).toBe("published");
+			expect(doc.createdDate).toBe("2025-06-08");
+			expect(doc.rawContent).toBe("Published content.");
+		});
+
+		it("should ignore invalid document status values", () => {
+			const content = `---
+id: doc-3
+title: "Bad Status"
+type: "other"
+status: invalid_value
+created_date: 2025-06-09
+---
+
+Body.`;
+
+			const doc = parseDocument(content);
+
+			expect(doc.id).toBe("doc-3");
+			expect(doc.status).toBeUndefined();
 		});
 	});
 });
@@ -584,6 +622,24 @@ describe("Markdown Serializer", () => {
 			expect(result).toContain("id: doc-2");
 			expect(result).not.toContain("updated_date:");
 			expect(result).not.toContain("tags:");
+			expect(result).not.toContain("status:");
+		});
+
+		it("should serialize document with status", () => {
+			const document: Document = {
+				id: "doc-3",
+				title: "Draft Doc",
+				type: "readme",
+				status: "draft",
+				createdDate: "2025-06-09",
+				rawContent: "Draft body.",
+			};
+
+			const result = serializeDocument(document);
+
+			expect(result).toContain("status: draft");
+			expect(result).toContain("id: doc-3");
+			expect(result).toContain("Draft body.");
 		});
 	});
 

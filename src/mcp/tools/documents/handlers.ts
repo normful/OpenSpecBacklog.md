@@ -16,6 +16,7 @@ export type DocumentCreateArgs = {
 	title: string;
 	content: string;
 	type?: Document["type"];
+	status?: Document["status"];
 	path?: string;
 	tags?: string[];
 };
@@ -25,6 +26,7 @@ export type DocumentUpdateArgs = {
 	title?: string;
 	content: string;
 	type?: Document["type"];
+	status?: Document["status"] | null;
 	path?: string;
 	tags?: string[];
 };
@@ -119,6 +121,7 @@ export class DocumentHandlers {
 				title: args.title,
 				content: args.content,
 				type: args.type,
+				status: args.status,
 				path: args.path,
 				tags: args.tags,
 			});
@@ -142,6 +145,7 @@ export class DocumentHandlers {
 				content: args.content,
 				title: args.title,
 				type: args.type,
+				status: args.status,
 				path: args.path,
 				tags: args.tags,
 			});

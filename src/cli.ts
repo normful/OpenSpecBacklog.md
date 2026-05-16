@@ -3062,12 +3062,25 @@ docCmd
 	.command("create <title>")
 	.option("-p, --path <path>")
 	.option("-t, --type <type>", `document type (${DOCUMENT_TYPE_VALUES.join(", ")})`)
+	.option("-s, --status <status>", "document status (draft, published, archived)")
 	.action(async (title: string, options) => {
 		const cwd = await requireProjectRoot();
 		const core = new Core(cwd);
+		const validStatuses = ["draft", "published", "archived"] as const;
+		let status: (typeof validStatuses)[number] | undefined;
+		if (options.status) {
+			const normalized = String(options.status).toLowerCase();
+			if (!(validStatuses as readonly string[]).includes(normalized)) {
+				console.error(`Invalid status: ${options.status}. Valid values are: draft, published, archived`);
+				process.exitCode = 1;
+				return;
+			}
+			status = normalized as (typeof validStatuses)[number];
+		}
 		const document = await core.createDocumentFromInput({
 			title: title as string,
 			type: (options.type || "other") as DocType["type"],
+			status,
 			path: options.path,
 			content: "",
 		});
@@ -3084,6 +3097,7 @@ docCmd
 	.option("--content <content>", "replace document markdown content")
 	.option("-p, --path <path>", "move document under a docs-relative path (absolute paths and .. are rejected)")
 	.option("-t, --type <type>", `document type (${DOCUMENT_TYPE_VALUES.join(", ")})`)
+	.option("-s, --status <status>", "set document status (draft, published, archived, or null to clear)")
 	.option("--tags <tags>", "set tags (comma-separated or use multiple times)", createMultiValueAccumulator())
 	.action(async (docId: string, options) => {
 		const cwd = await requireProjectRoot();
@@ -3093,11 +3107,28 @@ docCmd
 			throw new Error(`Document not found: ${docId}`);
 		}
 
+		const validStatuses = ["draft", "published", "archived"] as const;
+		let status: (typeof validStatuses)[number] | null | undefined;
+		if (options.status !== undefined) {
+			if (options.status === "null" || options.status === "") {
+				status = null;
+			} else {
+				const normalized = String(options.status).toLowerCase();
+				if (!(validStatuses as readonly string[]).includes(normalized)) {
+					console.error(`Invalid status: ${options.status}. Valid values are: draft, published, archived, or null`);
+					process.exitCode = 1;
+					return;
+				}
+				status = normalized as (typeof validStatuses)[number];
+			}
+		}
+
 		const document = await core.updateDocumentFromInput({
 			id: docId,
 			title: options.title,
 			content: options.content ?? existingDocument.rawContent,
 			type: options.type,
+			status,
 			path: options.path,
 			...(options.tags !== undefined && { tags: parseDelimitedStringList(options.tags) ?? [] }),
 		});

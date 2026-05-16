@@ -182,10 +182,14 @@ export interface Milestone {
 export const DOCUMENT_TYPE_VALUES = ["readme", "guide", "specification", "other"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPE_VALUES)[number];
 
+export const DOCUMENT_STATUS_VALUES = ["draft", "published", "archived"] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUS_VALUES)[number];
+
 export interface Document {
 	id: string;
 	title: string;
 	type: DocumentType;
+	status?: DocumentStatus;
 	createdDate: string;
 	updatedDate?: string;
 	rawContent: string; // Raw markdown content without frontmatter
@@ -200,6 +204,7 @@ export interface DocumentCreateInput {
 	title: string;
 	content?: string;
 	type?: Document["type"];
+	status?: DocumentStatus;
 	path?: string;
 	tags?: string[];
 }
@@ -210,6 +215,7 @@ export interface DocumentUpdateInput {
 	title?: string;
 	type?: Document["type"];
 	path?: string | null;
+	status?: DocumentStatus | null;
 	tags?: string[];
 }
 

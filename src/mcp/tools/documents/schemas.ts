@@ -1,7 +1,8 @@
-import { DOCUMENT_TYPE_VALUES } from "../../../types/index.ts";
+import { DOCUMENT_STATUS_VALUES, DOCUMENT_TYPE_VALUES } from "../../../types/index.ts";
 import type { JsonSchema } from "../../validation/validators.ts";
 
 const DOCUMENT_TYPE_ENUM = [...DOCUMENT_TYPE_VALUES];
+const DOCUMENT_STATUS_ENUM = [...DOCUMENT_STATUS_VALUES];
 
 export const documentListSchema: JsonSchema = {
 	type: "object",
@@ -44,6 +45,11 @@ export const documentCreateSchema: JsonSchema = {
 			maxLength: 50,
 			enum: DOCUMENT_TYPE_ENUM,
 		},
+		status: {
+			type: "string",
+			maxLength: 20,
+			enum: DOCUMENT_STATUS_ENUM,
+		},
 		path: {
 			type: "string",
 			maxLength: 300,
@@ -78,6 +84,11 @@ export const documentUpdateSchema: JsonSchema = {
 			type: "string",
 			maxLength: 50,
 			enum: DOCUMENT_TYPE_ENUM,
+		},
+		status: {
+			type: "string",
+			maxLength: 20,
+			enum: DOCUMENT_STATUS_ENUM,
 		},
 		path: {
 			type: "string",
