@@ -3,11 +3,20 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Command } from "commander";
+import { parse as parseYaml } from "yaml";
 import { requireProjectRoot } from "../cli.ts";
 import { Core } from "../core/backlog.ts";
+import {
+	ArtifactGraph,
+	ChangeMetadataSchema,
+	detectCompleted,
+	listSchemas,
+	resolveSchema,
+} from "../openspec/artifact-graph/index.ts";
+import type { SchemaYaml } from "../openspec/artifact-graph/types.ts";
 import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
@@ -289,6 +298,142 @@ export function registerChangeCommand(program: Command): void {
 					console.error(err);
 				}
 				process.exitCode = 1;
+			}
+		});
+
+	changeCmd
+		.command("status <name>")
+		.description("show artifact DAG state for a change set")
+		.option("--json", "output as JSON for agent consumption")
+		.action(async (name: string, options: { json?: boolean }) => {
+			const projectRoot = await requireProjectRoot();
+			const dir = changeDir(name, projectRoot);
+
+			// Handle missing change dir gracefully
+			if (!existsSync(dir)) {
+				if (options.json) {
+					console.log(JSON.stringify({ changeName: name, schemaName: null, artifacts: [] }));
+				} else {
+					console.log(`Change "${name}" not found.`);
+					console.log("Run `backlog change create <name>` to scaffold a new change set.");
+				}
+				return;
+			}
+
+			// Resolve schema name from .openspec.yaml metadata
+			const metadataPath = join(dir, ".openspec.yaml");
+			let schemaName = "spec-driven";
+			if (existsSync(metadataPath)) {
+				try {
+					const metadataContent = await readFile(metadataPath, "utf-8");
+					const parsed = parseYaml(metadataContent);
+					const result = ChangeMetadataSchema.safeParse(parsed);
+					if (result.success) {
+						schemaName = result.data.schema;
+					} else {
+						console.error(`Invalid .openspec.yaml at ${metadataPath.replace(projectRoot, ".")}:`);
+						for (const issue of result.error.issues) {
+							console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
+						}
+						process.exit(1);
+					}
+				} catch (err) {
+					console.error(`Failed to read .openspec.yaml: ${err instanceof Error ? err.message : String(err)}`);
+					process.exit(1);
+				}
+			}
+
+			// Resolve schema
+			let schema: SchemaYaml;
+			try {
+				schema = resolveSchema(schemaName, projectRoot);
+			} catch {
+				// Schema not found
+				const available = listSchemas(projectRoot);
+				if (available.length === 0) {
+					console.error(`Schema "${schemaName}" is not available. No schemas found.`);
+					console.error(
+						"Create a schema at openspec/schemas/<name>/schema.yaml or install a package with built-in schemas.",
+					);
+				} else {
+					console.error(`Schema "${schemaName}" not found. Available schemas: ${available.join(", ")}`);
+				}
+				process.exit(1);
+			}
+
+			// Build graph and detect completed artifacts
+			const graph = ArtifactGraph.fromSchema(schema);
+			const completed = detectCompleted(graph, dir);
+
+			// Compute per-artifact status
+			const artifacts = graph.getAllArtifacts().map((a) => {
+				if (completed.has(a.id)) {
+					return { id: a.id, status: "done" as const };
+				}
+
+				const ready = graph.getNextArtifacts(completed);
+				if (ready.includes(a.id)) {
+					return { id: a.id, status: "ready" as const };
+				}
+
+				const blocked = graph.getBlocked(completed);
+				const missingDeps = blocked[a.id] ?? [];
+				return { id: a.id, status: "blocked" as const, missingDeps };
+			});
+
+			const total = artifacts.length;
+			const doneCount = artifacts.filter((a) => a.status === "done").length;
+
+			// Output
+			if (options.json) {
+				console.log(
+					JSON.stringify(
+						{
+							changeName: name,
+							schemaName: graph.getName(),
+							artifacts,
+						},
+						null,
+						2,
+					),
+				);
+				return;
+			}
+
+			// Text output with color-coded indicators
+			const supportsColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+			const green = (s: string) => (supportsColor ? `\u001B[32m${s}\u001B[0m` : s);
+			const blue = (s: string) => (supportsColor ? `\u001B[34m${s}\u001B[0m` : s);
+			const red = (s: string) => (supportsColor ? `\u001B[31m${s}\u001B[0m` : s);
+			const bold = (s: string) => (supportsColor ? `\u001B[1m${s}\u001B[0m` : s);
+
+			console.log(`${bold("Change:")} ${name}`);
+			console.log(`${bold("Schema:")} ${graph.getName()}`);
+			console.log(`${bold("Progress:")} ${doneCount}/${total} artifacts complete`);
+			console.log("");
+
+			for (const a of artifacts) {
+				if (a.status === "done") {
+					console.log(`  ${green("✓")} ${a.id} (done)`);
+				} else if (a.status === "ready") {
+					console.log(`  ${blue("○")} ${a.id} (ready)`);
+				} else {
+					const deps = (a as { id: string; status: "blocked"; missingDeps: string[] }).missingDeps;
+					console.log(`  ${red("◉")} ${a.id} (blocked — needs: ${deps.join(", ")})`);
+				}
+			}
+
+			// Next action hint
+			const ready = artifacts.filter((a) => a.status === "ready");
+			if (ready.length > 0) {
+				console.log("");
+				console.log(`Next: ${ready[0]?.id} is ready to be created`);
+			} else if (doneCount < total) {
+				console.log("");
+				console.log("All remaining artifacts are blocked. Complete ready artifacts first.");
+			} else {
+				console.log("");
+				console.log("All artifacts complete!");
 			}
 		});
 
