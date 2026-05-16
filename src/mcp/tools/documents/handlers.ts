@@ -45,6 +45,9 @@ export class DocumentHandlers {
 			`path: ${document.path ?? "(unknown)"}`,
 			`created: ${document.createdDate}`,
 		];
+		if (document.status) {
+			metadata.push(`status: ${document.status}`);
+		}
 		if (document.updatedDate) {
 			metadata.push(`updated: ${document.updatedDate}`);
 		}

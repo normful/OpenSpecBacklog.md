@@ -1050,6 +1050,7 @@ export class BacklogServer {
 				createdDate: doc.createdDate,
 				updatedDate: doc.updatedDate,
 				lastModified: doc.updatedDate || doc.createdDate,
+				ttttstatus: doc.status ?? null,
 				tags: doc.tags || [],
 			}));
 			return Response.json(docFiles);

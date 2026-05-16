@@ -348,13 +348,22 @@ export class ApiClient {
 		return response.json();
 	}
 
-	async updateDoc(filename: string, content: string, title?: string, path?: string | null): Promise<Document> {
+	async updateDoc(
+		filename: string,
+		content: string,
+		title?: string,
+		path?: string | null,
+		status?: string | null,
+	): Promise<Document> {
 		const payload: Record<string, unknown> = { content };
 		if (typeof title === "string") {
 			payload.title = title;
 		}
 		if (path !== undefined) {
 			payload.path = path;
+		}
+		if (status !== undefined) {
+			payload.status = status;
 		}
 
 		const response = await fetch(`${API_BASE}/docs/${encodeURIComponent(filename)}`, {
@@ -370,13 +379,18 @@ export class ApiClient {
 		return response.json();
 	}
 
-	async createDoc(filename: string, content: string, path?: string): Promise<Document & { success?: boolean }> {
+	async createDoc(
+		filename: string,
+		content: string,
+		path?: string,
+		status?: string,
+	): Promise<Document & { success?: boolean }> {
 		const response = await fetch(`${API_BASE}/docs`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify({ filename, content, path }),
+			body: JSON.stringify({ filename, content, path, status }),
 		});
 		if (!response.ok) {
 			throw new Error("Failed to create document");
