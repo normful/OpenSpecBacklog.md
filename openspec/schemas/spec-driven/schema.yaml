@@ -65,4 +65,30 @@ artifacts:
     requires:
       - proposal
 
+  - id: documents
+    generates: "backlog/docs/**/*.md"
+    description: Published documentation for the change (guides, readmes, specs)
+    status: draft
+    statuses:
+      - draft
+      - published
+      - archived
+    instruction: |
+      Create documentation artifacts that explain HOW TO USE the implemented change.
+
+      Each document must have:
+      - **Title**: Clear, descriptive name
+      - **Content**: Markdown body explaining usage, configuration, and examples
+      - **Status**: One of draft → published → archived
+
+      Documents live in the Backlog.md docs system (`backlog/docs/<subpath>/`).
+      Use `/documentation/doc:N` in the Web UI to view and edit them.
+
+      Suggested docs:
+      - `guides/<capability>.md` — walkthroughs and tutorials
+      - `readmes/<area>.md` — reference documentation
+      - `specs/<name>.md` — formal specification documents
+    requires:
+      - design
+
 
