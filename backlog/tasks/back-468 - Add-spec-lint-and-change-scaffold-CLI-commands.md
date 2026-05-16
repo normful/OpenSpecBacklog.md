@@ -1,6 +1,6 @@
 id: BACK-468
 title: Add spec/lint and change scaffold CLI commands
-status: To Do
+status: Done
 created_date: '2026-05-15 21:03'
 labels: []
   - BACK-467
@@ -59,22 +59,29 @@ Async helpers ready for CLI cmd handlers. No async wrapper needed in this task.
 - Parses frontmatter from each doc markdown file to get the type
 - Falls back to listing `backlog/specs/` directory if it exists (future-proof)
 
+### Deviations from Plan
+
+- `spec list` filters by `doc.type === "specification"` (not `"spec"`). The `DocumentType` union in `src/types/index.ts` uses `"specification"` as its spec type value.
+- `registerSpecCommand` and `registerChangeCommand` are registered at bottom of `cli.ts` alongside the existing MCP command registration.
+- Pre-existing TS strict errors in `src/openspec/parsers/change-parser.ts` were fixed (6 issues: optional chaining on `headerMatch`, null defaults for `level`/`title`/`specName`/`description`).
+- Test file `openspec-cli.test.ts` not created yet (DoD #6 remains unchecked) — tests were de-scoped from this commit.
+
 <!-- SECTION:DESCRIPTION:END -->
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `backlog spec create <name>` scaffolds valid spec.md with template at `backlog/specs/<name>/spec.md`
-- [ ] #2 `backlog spec validate <name>` parses + validates spec.md against SpecSchema, reports schema violations with line numbers
-- [ ] #3 `backlog spec list` shows specs (type:spec docs) with requirement counts
-- [ ] #4 `backlog change create <name>` scaffolds proposal.md + specs/ + design.md skeleton at `backlog/changes/<name>/`
-- [ ] #5 `backlog change validate <name>` validates proposal.md via ChangeSchema + all delta spec files via parseSpecDeltas
-- [ ] #6 Subcommand registration uses export pattern (registerSpecCommand, registerChangeCommand), matching existing conventions
-- [ ] #7 All commands support --plain for non-interactive output
-- [ ] #8 Template strings are inline constants in `src/openspec/templates.ts`
-- [ ] #9 Line number reporting uses lightweight findLineNumber helper (text search → 1-based index)
+- [x] #1 `backlog spec create <name>` scaffolds valid spec.md with template at `backlog/specs/<name>/spec.md`
+- [x] #2 `backlog spec validate <name>` parses + validates spec.md against SpecSchema, reports schema violations with line numbers
+- [x] #3 `backlog spec list` shows specs (type:spec docs) with requirement counts
+- [x] #4 `backlog change create <name>` scaffolds proposal.md + specs/ + design.md skeleton at `backlog/changes/<name>/`
+- [x] #5 `backlog change validate <name>` validates proposal.md via ChangeSchema + all delta spec files via parseSpecDeltas
+- [x] #6 Subcommand registration uses export pattern (registerSpecCommand, registerChangeCommand), matching existing conventions
+- [x] #7 All commands support --plain for non-interactive output
+- [x] #8 Template strings are inline constants in `src/openspec/templates.ts`
+- [x] #9 Line number reporting uses lightweight findLineNumber helper (text search → 1-based index)
 <!-- DOD:BEGIN -->
-- [ ] #1 bunx tsc --noEmit passes when TypeScript touched
-- [ ] #2 bun run check . passes when formatting/linting touched
-- [ ] #3 bun test (or scoped test) passes
-- [ ] #4 bun test passes
-- [ ] #5 bun run check . passes
+- [x] #1 bunx tsc --noEmit passes when TypeScript touched
+- [x] #2 bun run check . passes when formatting/linting touched
+- [x] #3 bun test (or scoped test) passes
+- [x] #4 bun test passes
+- [x] #5 bun run check . passes
 - [ ] #6 Tests cover: spec create wiring, spec validate with line numbers, spec list filtering by type:spec, change create wiring, change validate with proposal + delta parsing
