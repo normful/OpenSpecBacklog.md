@@ -1,7 +1,7 @@
 ---
 id: BACK-471
 title: Add 'backlog change status' cmd with DAG state output
-status: To Do
+status: Done
 assignee:
   - norm
 created_date: '2026-05-15 21:03'
