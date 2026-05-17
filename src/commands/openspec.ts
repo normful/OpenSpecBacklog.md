@@ -9,15 +9,41 @@ import type { Command } from "commander";
 import { requireProjectRoot } from "../cli.ts";
 import { Core } from "../core/backlog.ts";
 import { archiveChange } from "../openspec/archive.ts";
-import { ArtifactGraph, detectCompleted, listSchemas, resolveSchema } from "../openspec/artifact-graph/index.ts";
-import type { SchemaYaml } from "../openspec/artifact-graph/types.ts";
+import { CHANGE_ARTIFACTS, computeArtifactStatus, detectCompleted } from "../openspec/change-checklist.ts";
 import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
 import { buildDeltaSpecWithEntry, removeDeltaByIndex } from "../openspec/serializers.ts";
 import { syncSpecs } from "../openspec/sync.ts";
-import { PROPOSAL_TEMPLATE, SPEC_TEMPLATE } from "../openspec/templates.ts";
 import type { Document } from "../types/index.ts";
+
+// ─── Inline template strings (ported from deleted src/openspec/templates.ts) ───
+
+const SPEC_TEMPLATE = `## Purpose
+
+Describe the purpose of this specification.
+
+## Requirements
+
+### Requirement: placeholder-requirement
+
+The system SHALL satisfy this requirement.
+
+#### Scenario: basic-behavior
+
+GIVEN a starting state
+WHEN an action occurs
+THEN an expected outcome happens
+`;
+
+const PROPOSAL_TEMPLATE = `## Why
+
+Explain the motivation and background for this change. Why is it needed? What problem does it solve? This section should be at least 50 characters.
+
+## What Changes
+
+Summarize the changes being proposed. What deltas will be applied, and to which specs?
+`;
 
 /**
  * Find the 1-based line number of a text snippet within larger content.
@@ -336,45 +362,13 @@ export function registerChangeCommand(program: Command): void {
 				return;
 			}
 
-			// Always use spec-driven schema
-			let schema: SchemaYaml;
-			try {
-				schema = resolveSchema("spec-driven", projectRoot);
-			} catch {
-				const available = listSchemas(projectRoot);
-				if (available.length === 0) {
-					console.error('Schema "spec-driven" is not available. No schemas found.');
-					console.error(
-						"Create a schema at openspec/schemas/spec-driven/schema.yaml or install a package with built-in schemas.",
-					);
-				} else {
-					console.error(`Schema "spec-driven" not found. Available schemas: ${available.join(", ")}`);
-				}
-				process.exit(1);
-			}
+			// Detect completed artifacts using the flat checklist
+			const completed = detectCompleted(CHANGE_ARTIFACTS, dir, projectRoot);
 
-			// Build graph and detect completed artifacts
-			const graph = ArtifactGraph.fromSchema(schema);
-			const completed = detectCompleted(graph, dir, projectRoot);
-
-			// Compute per-artifact status
-			const artifacts = graph.getAllArtifacts().map((a) => {
-				if (completed.has(a.id)) {
-					return { id: a.id, status: "done" as const };
-				}
-
-				const ready = graph.getNextArtifacts(completed);
-				if (ready.includes(a.id)) {
-					return { id: a.id, status: "ready" as const };
-				}
-
-				const blocked = graph.getBlocked(completed);
-				const missingDeps = blocked[a.id] ?? [];
-				return { id: a.id, status: "blocked" as const, missingDeps };
-			});
-
-			const total = artifacts.length;
-			const doneCount = artifacts.filter((a) => a.status === "done").length;
+			// Compute per-artifact status using the flat checklist
+			const statuses = computeArtifactStatus(completed, CHANGE_ARTIFACTS);
+			const total = CHANGE_ARTIFACTS.length;
+			const doneCount = statuses.filter((s) => s.status === "done").length;
 
 			// Output
 			if (options.json) {
@@ -382,8 +376,7 @@ export function registerChangeCommand(program: Command): void {
 					JSON.stringify(
 						{
 							changeName: name,
-							schemaName: graph.getName(),
-							artifacts,
+							artifacts: statuses,
 						},
 						null,
 						2,
@@ -400,26 +393,24 @@ export function registerChangeCommand(program: Command): void {
 			const bold = (s: string) => (supportsColor ? `\u001B[1m${s}\u001B[0m` : s);
 
 			console.log(`${bold("Change:")} ${name}`);
-			console.log(`${bold("Schema:")} ${graph.getName()}`);
 			console.log(`${bold("Progress:")} ${doneCount}/${total} artifacts complete`);
 			console.log("");
 
-			for (const a of artifacts) {
-				if (a.status === "done") {
-					console.log(`  ${green("✓")} ${a.id} (done)`);
-				} else if (a.status === "ready") {
-					console.log(`  ${blue("○")} ${a.id} (ready)`);
+			for (const s of statuses) {
+				if (s.status === "done") {
+					console.log(`  ${green("✓")} ${s.id} (done)`);
+				} else if (s.status === "ready") {
+					console.log(`  ${blue("○")} ${s.id} (ready)`);
 				} else {
-					const deps = (a as { id: string; status: "blocked"; missingDeps: string[] }).missingDeps;
-					console.log(`  ${red("◉")} ${a.id} (blocked — needs: ${deps.join(", ")})`);
+					console.log(`  ${red("◉")} ${s.id} (blocked — needs: ${s.missingDeps?.join(", ")})`);
 				}
 			}
 
 			// Next action hint
-			const ready = artifacts.filter((a) => a.status === "ready");
-			if (ready.length > 0) {
+			const readyArtifacts = statuses.filter((s) => s.status === "ready");
+			if (readyArtifacts.length > 0) {
 				console.log("");
-				console.log(`Next: ${ready[0]?.id} is ready to be created`);
+				console.log(`Next: ${readyArtifacts[0]?.id} is ready to be created`);
 			} else if (doneCount < total) {
 				console.log("");
 				console.log("All remaining artifacts are blocked. Complete ready artifacts first.");

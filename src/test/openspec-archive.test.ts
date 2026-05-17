@@ -1,5 +1,5 @@
 /**
- * Tests for `backlog change archive` command — DAG-aware archive pipeline.
+ * Tests for `backlog change archive` command — checklist-aware archive pipeline.
  * Tests the pure archive logic: completeness check, unsynced delta detection,
  * directory move, force override, and error reporting.
  */
@@ -50,6 +50,19 @@ function createChangeDir(env: TestEnv, name: string, files?: Record<string, stri
 	}
 }
 
+/**
+ * Create publish artifact files (backlog/docs/) at the project root level.
+ * Needed when a test requires all 4 change artifacts to be complete.
+ */
+function createPublishFiles(env: TestEnv, files?: Record<string, string>): void {
+	const docsDir = join(env.root, "backlog", "docs");
+	mkdirSync(docsDir, { recursive: true });
+	const docsToWrite = files ?? { "guide.md": "# Guide\n\nTest doc.\n" };
+	for (const [filename, content] of Object.entries(docsToWrite)) {
+		writeFileSync(join(docsDir, filename), content, "utf-8");
+	}
+}
+
 function changeDirExists(env: TestEnv, name: string): boolean {
 	return existsSync(join(env.changesDir, name));
 }
@@ -65,38 +78,6 @@ function hasArchiveEntries(env: TestEnv): string[] {
 	const dir = join(env.changesDir, "archive");
 	if (!existsSync(dir)) return [];
 	return readdirSync(dir);
-}
-
-/**
- * Create the spec-driven schema for testing so resolveSchema() works.
- * Uses the existing resolver to find a schema; if none exists, we detect
- * that the test environment has no schemas.
- */
-function ensureSchemaAvailable(env: TestEnv): boolean {
-	// This is a special case for integration-like tests.
-	// For unit tests of archiveChange, we should test with both schema-present
-	// and schema-missing scenarios.
-	// The schema presence check happens inside archiveChange via resolveSchema.
-	// We can't easily create a schema in tests since the resolver checks for
-	// `openspec/schemas/spec-driven/schema.yaml` in the project root.
-	// For thorough testing, we create a minimal schema.
-	const schemaDir = join(env.root, "openspec", "schemas", "spec-driven");
-	mkdirSync(schemaDir, { recursive: true });
-	const schemaYaml = `name: spec-driven
-version: 1
-description: Test schema for archive tests
-artifacts:
-  - id: proposal
-    generates: proposal.md
-    template: proposal.md
-  - id: design
-    generates: design.md
-    template: design.md
-    requires:
-      - proposal
-`;
-	writeFileSync(join(schemaDir, "schema.yaml"), schemaYaml, "utf-8");
-	return true;
 }
 
 // ─── Unit tests: archiveDirName ───
@@ -177,7 +158,6 @@ describe("archiveChange — completeness check", () => {
 
 	beforeEach(() => {
 		env = createTestEnv("completeness");
-		ensureSchemaAvailable(env);
 	});
 
 	afterEach(() => {
@@ -185,20 +165,8 @@ describe("archiveChange — completeness check", () => {
 	});
 
 	it("blocks archive when artifacts incomplete (shows blockers)", () => {
-		// Create schema with 3 artifacts where the last depends on the 2nd
-		// so design is done but review is blocked (not ready, not done)
-		const schemaDir = join(env.root, "openspec", "schemas", "spec-driven");
-		const schemaYaml = `name: spec-driven
-version: 1
-description: Test schema for blocked archive
-artifacts:
-  - { id: proposal, generates: proposal.md, template: proposal.md }
-  - { id: design, generates: design.md, template: design.md, requires: [proposal] }
-  - { id: review, generates: review.md, template: review.md, requires: [design] }
-`;
-		writeFileSync(join(schemaDir, "schema.yaml"), schemaYaml, "utf-8");
-
-		// Only proposal.md and design.md exist — review.md is missing
+		// 4-artifact hardcoded checklist: proposal, deltas, design, publish
+		// Only proposal.md and design.md exist — no specs/ files, no backlog/docs/ files
 		createChangeDir(env, "my-change", {
 			"proposal.md": "proposal content",
 			"design.md": "design content",
@@ -206,29 +174,25 @@ artifacts:
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
-		// Debug: if blockers is empty, review should be "ready" (not blocked)
-		// because design is done. Review depends on design, which is complete.
-		// So review is "ready" (next artifact), not "blocked".
-		// The blocked map only contains artifacts with unmet deps.
+		// proposal=done, design=done, deltas=ready, publish=ready
+		// isChangeComplete returns false (deltas, publish missing)
 		expect(result.success).toBe(false);
-		if (result.blockers.length === 0) {
-			// When no deps are unmet, the artifact is "ready" not "blocked".
-			// So isComplete returns false but getBlocked returns empty.
-			// The reason should still say incomplete.
-			expect(result.reason).toContain("incomplete");
-			expect(result.doneArtifacts.length).toBeLessThan(result.totalArtifacts);
-		} else {
-			expect(result.blockers.some((b) => b.includes("review"))).toBe(true);
-		}
+		expect(result.reason).toContain("incomplete");
+		expect(result.doneArtifacts).toEqual(["proposal", "design"]);
+		expect(result.totalArtifacts).toBe(4);
+		expect(result.reason).toContain("2/4");
 		expect(changeDirExists(env, "my-change")).toBe(true);
 	});
 
 	it("allows archive when all artifacts complete", () => {
-		// Both proposal.md and design.md exist
+		// All 4 change artifacts present
+		// Use flat spec file (not a subdirectory) to avoid triggering unsynced delta detection
 		createChangeDir(env, "my-change", {
 			"proposal.md": "proposal content",
 			"design.md": "design content",
+			"specs/auth.md": "## ADDED\n",
 		});
+		createPublishFiles(env);
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
@@ -241,18 +205,23 @@ artifacts:
 	});
 
 	it("reports which artifacts were done at time of archive", () => {
+		// All 4 change artifacts present
 		createChangeDir(env, "my-change", {
 			"proposal.md": "proposal content",
 			"design.md": "design content",
+			"specs/auth.md": "## ADDED\n",
 		});
+		createPublishFiles(env);
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
 		expect(result.success).toBe(true);
 		expect(result.doneArtifacts).toContain("proposal");
+		expect(result.doneArtifacts).toContain("deltas");
 		expect(result.doneArtifacts).toContain("design");
-		expect(result.totalArtifacts).toBe(2);
-		expect(result.doneArtifacts.length).toBe(2);
+		expect(result.doneArtifacts).toContain("publish");
+		expect(result.totalArtifacts).toBe(4);
+		expect(result.doneArtifacts.length).toBe(4);
 	});
 
 	it("reports partial done when some artifacts complete but archive blocked", () => {
@@ -265,8 +234,8 @@ artifacts:
 
 		expect(result.success).toBe(false);
 		expect(result.doneArtifacts).toEqual(["proposal"]);
-		expect(result.totalArtifacts).toBe(2);
-		expect(result.reason).toContain("1/2");
+		expect(result.totalArtifacts).toBe(4);
+		expect(result.reason).toContain("1/4");
 	});
 });
 
@@ -275,7 +244,6 @@ describe("archiveChange — --force override", () => {
 
 	beforeEach(() => {
 		env = createTestEnv("force");
-		ensureSchemaAvailable(env);
 	});
 
 	afterEach(() => {
@@ -306,7 +274,7 @@ describe("archiveChange — --force override", () => {
 		expect(result.success).toBe(true);
 		expect(result.blockers).toEqual([]);
 		expect(result.doneArtifacts).toEqual(["proposal"]);
-		expect(result.totalArtifacts).toBe(2);
+		expect(result.totalArtifacts).toBe(4);
 	});
 });
 
@@ -315,7 +283,6 @@ describe("archiveChange — unsynced delta detection", () => {
 
 	beforeEach(() => {
 		env = createTestEnv("unsynced-check");
-		ensureSchemaAvailable(env);
 	});
 
 	afterEach(() => {
@@ -323,11 +290,13 @@ describe("archiveChange — unsynced delta detection", () => {
 	});
 
 	it("blocks archive when unsynced deltas exist (no --no-sync-check)", () => {
+		// All 4 artifacts present so completeness passes, but specs/ has subdirectories → unsynced
 		createChangeDir(env, "my-change", {
 			"proposal.md": "proposal content",
 			"design.md": "design content",
-			"specs/auth/spec.md": "## ADDED Requirements",
+			"specs/hidden/spec.md": "## ADDED Requirements\n",
 		});
+		createPublishFiles(env);
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
@@ -338,11 +307,16 @@ describe("archiveChange — unsynced delta detection", () => {
 	});
 
 	it("--no-sync-check bypasses unsynced delta detection", () => {
+		// All 4 artifacts present
 		createChangeDir(env, "my-change", {
 			"proposal.md": "proposal content",
 			"design.md": "design content",
-			"specs/auth/spec.md": "## MODIFIED Requirements",
+			"specs/auth.md": "## MODIFIED Requirements\n",
 		});
+		createPublishFiles(env);
+		// Add an unsynced delta (subdirectory under specs/)
+		mkdirSync(join(env.changesDir, "my-change", "specs", "unsynced"), { recursive: true });
+		writeFileSync(join(env.changesDir, "my-change", "specs", "unsynced", "spec.md"), "## ADDED\n", "utf-8");
 
 		const result = archiveChange("my-change", env.root, { force: false, noSyncCheck: true });
 
@@ -353,11 +327,13 @@ describe("archiveChange — unsynced delta detection", () => {
 	});
 
 	it("--force does NOT bypass unsynced delta check (use --no-sync-check for that)", () => {
+		// All 4 artifacts present, but specs/ has subdirectories → unsynced
 		createChangeDir(env, "my-change", {
 			"proposal.md": "proposal content",
 			"design.md": "design content",
-			"specs/auth/spec.md": "## ADDED Requirements",
+			"specs/hidden/spec.md": "## ADDED Requirements\n",
 		});
+		createPublishFiles(env);
 
 		const result = archiveChange("my-change", env.root, { force: true });
 
@@ -389,7 +365,6 @@ describe("archiveChange — directory move", () => {
 
 	beforeEach(() => {
 		env = createTestEnv("move");
-		ensureSchemaAvailable(env);
 	});
 
 	afterEach(() => {
@@ -411,7 +386,7 @@ describe("archiveChange — directory move", () => {
 		// Check archive dir has all files
 		const archives = hasArchiveEntries(env);
 		expect(archives.length).toBe(1);
-		const archivePath = join(env.changesDir, "archive", archives[0]!);
+		const archivePath = join(env.changesDir, "archive", archives[0] as string);
 		expect(existsSync(join(archivePath, "proposal.md"))).toBe(true);
 		expect(existsSync(join(archivePath, "design.md"))).toBe(true);
 		expect(existsSync(join(archivePath, "specs", "auth", "spec.md"))).toBe(true);
@@ -421,7 +396,9 @@ describe("archiveChange — directory move", () => {
 		createChangeDir(env, "my-change", {
 			"proposal.md": "prop content",
 			"design.md": "design content",
+			"specs/auth.md": "## ADDED\n",
 		});
+		createPublishFiles(env);
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
@@ -431,8 +408,17 @@ describe("archiveChange — directory move", () => {
 	});
 
 	it("archives multiple changes independently", () => {
-		createChangeDir(env, "change-a", { "proposal.md": "a", "design.md": "b" });
-		createChangeDir(env, "change-b", { "proposal.md": "c", "design.md": "d" });
+		createChangeDir(env, "change-a", {
+			"proposal.md": "a",
+			"design.md": "b",
+			"specs/auth.md": "## ADDED\n",
+		});
+		createChangeDir(env, "change-b", {
+			"proposal.md": "c",
+			"design.md": "d",
+			"specs/auth.md": "## ADDED\n",
+		});
+		createPublishFiles(env);
 
 		const r1 = archiveChange("change-a", env.root, { force: false });
 		const r2 = archiveChange("change-b", env.root, { force: false });
@@ -454,7 +440,6 @@ describe("archiveChange — error handling", () => {
 
 	beforeEach(() => {
 		env = createTestEnv("errors");
-		ensureSchemaAvailable(env);
 	});
 
 	afterEach(() => {
@@ -467,21 +452,5 @@ describe("archiveChange — error handling", () => {
 		expect(result.success).toBe(false);
 		expect(result.reason).toContain("not found");
 		expect(result.archivePath).toBeNull();
-	});
-
-	it("reports missing schema when project-local overrides with broken schema", () => {
-		// Create project-local schema that overrides the package built-in with broken content
-		const emptyEnv = createTestEnv("bad-schema");
-		const schemaDir = join(emptyEnv.root, "openspec", "schemas", "spec-driven");
-		mkdirSync(schemaDir, { recursive: true });
-		writeFileSync(join(schemaDir, "schema.yaml"), "this is not valid yaml", "utf-8");
-		createChangeDir(emptyEnv, "my-change", { "proposal.md": "x", "design.md": "y" });
-
-		const result = archiveChange("my-change", emptyEnv.root, { force: false });
-
-		expect(result.success).toBe(false);
-		expect(result.reason).toContain("Schema");
-
-		cleanup(emptyEnv);
 	});
 });

@@ -2,14 +2,19 @@
  * Archive pipeline for change sets.
  * Pure logic — no CLI imports, no side effects.
  *
- * Checks ArtifactGraph completeness, detects unsynced deltas,
+ * Checks change checklist completeness, detects unsynced deltas,
  * then moves backlog/changes/<name> to backlog/changes/archive/<date>-<name>/.
  */
 
 import { existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-import { ArtifactGraph, detectCompleted, resolveSchema } from "../openspec/artifact-graph/index.ts";
+import {
+	CHANGE_ARTIFACTS,
+	computeArtifactStatus,
+	detectCompleted,
+	isChangeComplete,
+} from "../openspec/change-checklist.ts";
 
 // ─── Types ───
 
@@ -65,20 +70,10 @@ export function archiveDir(projectRoot: string, archivedName: string): string {
 }
 
 /**
- * Build a list of blocker descriptions from a BlockedArtifacts map.
- * Each entry is formatted as: "<artifactId> (needs: <dep1>, <dep2>)".
- */
-function formatBlockers(blockedMap: Record<string, string[]>): string[] {
-	return Object.entries(blockedMap).map(([id, missingDeps]) =>
-		missingDeps.length > 0 ? `${id} (needs: ${missingDeps.join(", ")})` : `${id} (not started)`,
-	);
-}
-
-/**
  * Archive a change set: checks completeness, then moves to archive dir.
  *
  * Steps:
- * 1. Resolve spec-driven schema, build ArtifactGraph, detect completed
+ * 1. Detect completed artifacts using flat checklist
  * 2. Check isComplete — if incomplete and not --force, return blockers
  * 3. Check for unsynced deltas — warn unless --no-sync-check
  * 4. Move backlog/changes/<name> → backlog/changes/archive/<date>-<name>/
@@ -105,32 +100,20 @@ export function archiveChange(changeName: string, projectRoot: string, options: 
 		};
 	}
 
-	// 1. Resolve schema, build graph, detect completed
-	let graph: ArtifactGraph;
-	try {
-		const schema = resolveSchema("spec-driven", projectRoot);
-		graph = ArtifactGraph.fromSchema(schema);
-	} catch {
-		return {
-			success: false,
-			changeName,
-			archivePath: null,
-			blockers: [],
-			hasUnsyncedDeltas: false,
-			doneArtifacts: [],
-			totalArtifacts: 0,
-			reason: 'Schema "spec-driven" not found. Run `backlog change status` to debug.',
-		};
-	}
-
-	const completed = detectCompleted(graph, changePath, projectRoot);
-	const allArtifacts = graph.getAllArtifacts();
-	const doneArtifacts = allArtifacts.filter((a) => completed.has(a.id)).map((a) => a.id);
+	// 1. Detect completed artifacts using flat checklist
+	const completed = detectCompleted(CHANGE_ARTIFACTS, changePath, projectRoot);
+	const statuses = computeArtifactStatus(completed, CHANGE_ARTIFACTS);
+	const doneArtifacts = statuses.filter((s) => s.status === "done").map((s) => s.id);
+	const blockers = statuses
+		.filter((s) => s.status === "blocked")
+		.map((s) =>
+			s.missingDeps && s.missingDeps.length > 0
+				? `${s.id} (needs: ${s.missingDeps.join(", ")})`
+				: `${s.id} (not started)`,
+		);
 
 	// 2. Check completeness
-	const allDone = graph.isComplete(completed);
-	const blockedMap = graph.getBlocked(completed);
-	const blockers = formatBlockers(blockedMap);
+	const allDone = isChangeComplete(completed, CHANGE_ARTIFACTS);
 
 	if (!allDone && !options.force) {
 		return {
@@ -140,8 +123,8 @@ export function archiveChange(changeName: string, projectRoot: string, options: 
 			blockers,
 			hasUnsyncedDeltas: false,
 			doneArtifacts,
-			totalArtifacts: allArtifacts.length,
-			reason: `Artifacts incomplete (${completed.size}/${allArtifacts.length} done). Use --force to archive anyway.`,
+			totalArtifacts: CHANGE_ARTIFACTS.length,
+			reason: `Artifacts incomplete (${completed.size}/${CHANGE_ARTIFACTS.length} done). Use --force to archive anyway.`,
 		};
 	}
 
@@ -156,7 +139,7 @@ export function archiveChange(changeName: string, projectRoot: string, options: 
 			blockers,
 			hasUnsyncedDeltas: true,
 			doneArtifacts,
-			totalArtifacts: allArtifacts.length,
+			totalArtifacts: CHANGE_ARTIFACTS.length,
 			reason: "Unsynced deltas detected. Run `backlog change sync <name>` first, or use --no-sync-check to bypass.",
 		};
 	}
@@ -181,6 +164,6 @@ export function archiveChange(changeName: string, projectRoot: string, options: 
 		blockers: [],
 		hasUnsyncedDeltas: unsynced,
 		doneArtifacts,
-		totalArtifacts: allArtifacts.length,
+		totalArtifacts: CHANGE_ARTIFACTS.length,
 	};
 }
