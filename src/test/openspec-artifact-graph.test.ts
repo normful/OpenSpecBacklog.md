@@ -344,6 +344,24 @@ describe("isGlobPattern", () => {
 	});
 });
 
+// ─── isAbsoluteRelativePath ───
+describe("isAbsoluteRelativePath", () => {
+	it("detects backlog/ prefix", async () => {
+		const { isAbsoluteRelativePath } = await import("../openspec/artifact-graph/outputs.ts");
+		expect(isAbsoluteRelativePath("backlog/docs/**/*.md")).toBe(true);
+	});
+	it("detects openspec/ prefix", async () => {
+		const { isAbsoluteRelativePath } = await import("../openspec/artifact-graph/outputs.ts");
+		expect(isAbsoluteRelativePath("openspec/schemas/**/*.yaml")).toBe(true);
+	});
+	it("returns false for changeDir-relative paths", async () => {
+		const { isAbsoluteRelativePath } = await import("../openspec/artifact-graph/outputs.ts");
+		expect(isAbsoluteRelativePath("proposal.md")).toBe(false);
+		expect(isAbsoluteRelativePath("specs/*.md")).toBe(false);
+		expect(isAbsoluteRelativePath("design.md")).toBe(false);
+	});
+});
+
 // ─── detectCompleted (via state.ts — uses real filesystem) ───
 describe("detectCompleted", () => {
 	it("returns empty set for missing change directory", async () => {
@@ -400,5 +418,60 @@ describe("detectCompleted", () => {
 		expect(completed.has("proposal")).toBe(false); // proposal.md doesn't exist
 
 		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("resolves project-root-relative generates against projectRoot", async () => {
+		const { detectCompleted } = await import("../openspec/artifact-graph/state.ts");
+		const rootDir = `/tmp/backlog-test-root-relative-${Date.now()}`;
+		const changeDir = `${rootDir}/backlog/changes/my-change`;
+		const docsDir = `${rootDir}/backlog/docs`;
+		const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+		const { join } = await import("node:path");
+		mkdirSync(changeDir, { recursive: true });
+		mkdirSync(docsDir, { recursive: true });
+		writeFileSync(join(docsDir, "guide.md"), "content");
+
+		const graph = ArtifactGraph.fromSchema(
+			makeSchemaObject([
+				{
+					id: "documents",
+					generates: "backlog/docs/**/*.md",
+					template: "documents.md",
+				},
+			]),
+		);
+
+		// Without projectRoot, glob resolves against changeDir (finds nothing)
+		const completedNoRoot = detectCompleted(graph, changeDir);
+		expect(completedNoRoot.has("documents")).toBe(false);
+
+		// With projectRoot, glob resolves against rootDir (finds guide.md)
+		const completedWithRoot = detectCompleted(graph, changeDir, rootDir);
+		expect(completedWithRoot.has("documents")).toBe(true);
+
+		rmSync(rootDir, { recursive: true, force: true });
+	});
+
+	it("backlog/ path with no matching files returns incomplete", async () => {
+		const { detectCompleted } = await import("../openspec/artifact-graph/state.ts");
+		const rootDir = `/tmp/backlog-test-root-relative-empty-${Date.now()}`;
+		const changeDir = `${rootDir}/backlog/changes/my-change`;
+		const { mkdirSync, rmSync } = await import("node:fs");
+		mkdirSync(changeDir, { recursive: true });
+
+		const graph = ArtifactGraph.fromSchema(
+			makeSchemaObject([
+				{
+					id: "documents",
+					generates: "backlog/docs/**/*.md",
+					template: "documents.md",
+				},
+			]),
+		);
+
+		const completed = detectCompleted(graph, changeDir, rootDir);
+		expect(completed.has("documents")).toBe(false);
+
+		rmSync(rootDir, { recursive: true, force: true });
 	});
 });

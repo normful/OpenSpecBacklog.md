@@ -4,13 +4,14 @@
  *
  * Reads delta spec files from backlog/changes/<name>/specs/<spec>/spec.md,
  * parses them with parseDeltaSpec(), and applies each delta to the corresponding
- * main spec at backlog/specs/<spec>/spec.md.
+ * spec Document (type: specification) in backlog/docs/ via Core API.
  */
 
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { Core } from "../core/backlog.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { SpecSchema } from "../openspec/schemas/index.ts";
 
@@ -36,14 +37,6 @@ function findLineNumber(content: string, text: string): number {
 	}
 	return -1;
 }
-
-// ─── Types ───
-
-export interface SyncOptions {
-	dryRun?: boolean;
-}
-
-// ─── Internal helpers ───
 
 /**
  * Escape special regex characters in a string for literal matching.
@@ -71,7 +64,7 @@ function validateSpecContent(content: string, name: string): string[] {
 			// Extract requirement text from the first non-header content line,
 			// falling back to the header name if no content follows.
 			const lines = block.raw.split("\n").filter((l) => l.trim());
-			const firstLine = lines.length > 1 ? lines[1]!.trim() : "";
+			const firstLine = lines.length > 1 ? (lines[1]?.trim() ?? "") : "";
 			const text = firstLine || block.name;
 
 			const scenarioTexts = (block.raw.match(/#### Scenario:.*\n([\s\S]*?)(?=\n#### |\n### |$)/gi) ?? []).map((s) =>
@@ -204,15 +197,16 @@ export function applyRenamed(
 }
 
 /**
- * Sync deltas from a change's delta specs to main spec files.
+ * Sync deltas from a change's delta specs to spec Documents.
  *
  * @param changeName - Name of the change
- * @param projectRoot - Project root path
+ * @param core - Core instance for Document read/write
  * @param options - Sync options (dryRun)
  * @returns Summary string describing what was done
  */
-export async function syncSpecs(changeName: string, projectRoot: string, options: SyncOptions): Promise<string> {
+export async function syncSpecs(changeName: string, core: Core, options: SyncOptions): Promise<string> {
 	const isDryRun = options.dryRun ?? false;
+	const projectRoot = core.fs.rootDir;
 	const changePath = join(projectRoot, "backlog", "changes", changeName);
 
 	if (!existsSync(changePath)) {
@@ -249,11 +243,12 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 		const specErrors: string[] = [];
 		let specApplied = 0;
 
-		const mainSpecPath = join(projectRoot, "backlog", "specs", specName, "spec.md");
-		const specWasNew = !existsSync(mainSpecPath);
-		const mainContent = specWasNew ? "" : readFileSync(mainSpecPath, "utf-8");
+		// Find existing spec Document by title + type "specification"
+		const allDocs = await core.filesystem.listDocuments();
+		const specDoc = allDocs.find((d) => d.title.toLowerCase() === specName.toLowerCase() && d.type === "specification");
+		const specWasNew = !specDoc;
+		const mainContent = specDoc?.rawContent ?? "";
 
-		let backedUp = false;
 		let working = mainContent;
 		let hasChanges = false;
 
@@ -261,7 +256,6 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 		for (const block of deltaPlan.added) {
 			const result = applyAdded(working, block.raw);
 			if (result.applied) {
-				if (!working) backedUp = true;
 				working = result.content;
 				hasChanges = true;
 				specApplied++;
@@ -272,7 +266,6 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 		for (const block of deltaPlan.modified) {
 			const result = applyModified(working, block.name, block.raw);
 			if (result.applied) {
-				if (!working) backedUp = true;
 				working = result.content;
 				hasChanges = true;
 				specApplied++;
@@ -285,7 +278,6 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 		for (const name of deltaPlan.removed) {
 			const result = applyRemoved(working, name);
 			if (result.applied) {
-				if (!working) backedUp = true;
 				working = result.content;
 				hasChanges = true;
 				specApplied++;
@@ -298,7 +290,6 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 		for (const rename of deltaPlan.renamed) {
 			const result = applyRenamed(working, rename.from, rename.to);
 			if (result.applied) {
-				if (!working) backedUp = true;
 				working = result.content;
 				hasChanges = true;
 				specApplied++;
@@ -315,13 +306,28 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 
 		// Write
 		if (!isDryRun && hasChanges) {
-			if (!specWasNew && !backedUp && mainContent) {
-				copyFileSync(mainSpecPath, `${mainSpecPath}.bak`);
+			// Backup: write to backlog/changes/<name>/backups/<spec>.md.bak
+			if (!specWasNew && mainContent) {
+				const backupDir = join(changePath, "backups");
+				await mkdir(backupDir, { recursive: true });
+				await writeFile(join(backupDir, `${specName}.md.bak`), mainContent, "utf-8");
 			}
 
-			const mainSpecDir = join(projectRoot, "backlog", "specs", specName);
-			await mkdir(mainSpecDir, { recursive: true });
-			await writeFile(mainSpecPath, working, "utf-8");
+			// Update the spec Document via Core API (or create if new)
+			if (specDoc) {
+				await core.updateDocumentFromInput({
+					id: specDoc.id,
+					content: working,
+				});
+			} else {
+				// New spec: create a Document
+				await core.createDocumentFromInput({
+					title: specName,
+					type: "specification",
+					status: "draft",
+					content: working,
+				});
+			}
 		}
 
 		totalApplied += specApplied;
@@ -341,12 +347,14 @@ export async function syncSpecs(changeName: string, projectRoot: string, options
 
 	for (const r of perSpecResults) {
 		if (r.applied > 0) {
-			const created = isDryRun
-				? ""
-				: !existsSync(join(projectRoot, "backlog", "specs", r.spec, "spec.md"))
-					? " (created)"
-					: "";
-			summaryLines.push(`  ${r.spec}: ${r.applied} delta(s) applied${created}`);
+			// Detect creation vs update for summary display
+			const allDocs = await core.filesystem.listDocuments();
+			const createdDoc = allDocs.find(
+				(d) => d.title.toLowerCase() === r.spec.toLowerCase() && d.type === "specification",
+			);
+			const createdLabel =
+				createdDoc?.createdDate === new Date().toISOString().slice(0, 16).replace("T", " ") ? " (created)" : "";
+			summaryLines.push(`  ${r.spec}: ${r.applied} delta(s) applied${createdLabel}`);
 		}
 		for (const err of r.errors) {
 			summaryLines.push(`  ${r.spec}: ${err}`);

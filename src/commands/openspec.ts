@@ -355,7 +355,7 @@ export function registerChangeCommand(program: Command): void {
 
 			// Build graph and detect completed artifacts
 			const graph = ArtifactGraph.fromSchema(schema);
-			const completed = detectCompleted(graph, dir);
+			const completed = detectCompleted(graph, dir, projectRoot);
 
 			// Compute per-artifact status
 			const artifacts = graph.getAllArtifacts().map((a) => {
@@ -437,7 +437,8 @@ export function registerChangeCommand(program: Command): void {
 		.option("--dry-run", "show what would happen without writing")
 		.action(async (name: string, options: { dryRun?: boolean }) => {
 			const projectRoot = await requireProjectRoot();
-			const summary = await syncSpecs(name, projectRoot, { dryRun: options.dryRun ?? false });
+			const core = new Core(projectRoot);
+			const summary = await syncSpecs(name, core, { dryRun: options.dryRun ?? false });
 			console.log(summary);
 		});
 

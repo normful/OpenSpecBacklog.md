@@ -123,7 +123,7 @@ export function archiveChange(changeName: string, projectRoot: string, options: 
 		};
 	}
 
-	const completed = detectCompleted(graph, changePath);
+	const completed = detectCompleted(graph, changePath, projectRoot);
 	const allArtifacts = graph.getAllArtifacts();
 	const doneArtifacts = allArtifacts.filter((a) => completed.has(a.id)).map((a) => a.id);
 
