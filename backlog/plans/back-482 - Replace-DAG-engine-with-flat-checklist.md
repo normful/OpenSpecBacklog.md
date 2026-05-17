@@ -1,8 +1,9 @@
 id: back-482
 title: Replace DAG engine with flat checklist
-status: Draft
-assignee: []
+status: Done
+assignee: [norman]
 created_date: '2026-05-18'
+completed_date: '2026-05-18'
 priority: medium
 ## Source of truth
 - `src/openspec/change-checklist.ts`
