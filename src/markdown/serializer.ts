@@ -128,6 +128,7 @@ export function serializeDocument(document: Document): string {
 		title: document.title,
 		type: document.type,
 		...(document.status && { status: document.status }),
+		...(document.syncStatus && { sync_status: document.syncStatus }),
 		created_date: document.createdDate,
 		...(document.updatedDate && { updated_date: document.updatedDate }),
 		...(document.tags && document.tags.length > 0 && { tags: document.tags }),

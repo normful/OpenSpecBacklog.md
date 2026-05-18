@@ -4,11 +4,8 @@
  * Replaces the DAG engine (ArtifactGraph class, schema YAML, resolver,
  * topological sort) with a single hardcoded data structure + pure helpers.
  *
- * The change workflow has 4 artifacts with minimal real ordering constraints:
- * - proposal and deltas don't depend on each other (proposal is guidance, not a gate)
- * - design is independent of deltas (can design before or after writing deltas)
- * - publish depends on design because you can't doc before designing
- * - publish and deltas are independent of each other (docs vs. spec changes)
+ * The change workflow has 2 artifacts with no ordering constraints:
+ * - deltas (spec-delta files) and new-specs (new-spec files) are independent
  */
 
 import { existsSync } from "node:fs";
@@ -44,32 +41,18 @@ export interface ArtifactStatus {
  */
 export const CHANGE_ARTIFACTS: ChangeArtifact[] = [
 	{
-		id: "proposal",
-		label: "Proposal",
-		generates: "proposal.md",
-		projectRootRelative: false,
-		dependsOn: [],
-	},
-	{
 		id: "deltas",
 		label: "Delta specs",
-		generates: "specs/**/*.md",
+		generates: "*.spec-delta.md",
 		projectRootRelative: false,
 		dependsOn: [],
 	},
 	{
-		id: "design",
-		label: "Design doc",
-		generates: "design.md",
+		id: "new-specs",
+		label: "New specs",
+		generates: "*.new-spec.md",
 		projectRootRelative: false,
 		dependsOn: [],
-	},
-	{
-		id: "publish",
-		label: "Published docs",
-		generates: "backlog/docs/**/*.md",
-		projectRootRelative: true,
-		dependsOn: ["design"],
 	},
 ];
 

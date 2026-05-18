@@ -6,9 +6,10 @@
  * then moves backlog/changes/<name> to backlog/changes/archive/<date>-<name>/.
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
+import { parseDocument } from "../markdown/parser.ts";
 import {
 	CHANGE_ARTIFACTS,
 	computeArtifactStatus,
@@ -49,17 +50,30 @@ export function archiveDirName(name: string): string {
 }
 
 /**
- * Check if a change has unsynced delta spec files.
- * Returns true if any spec files exist under the change's specs/ directory.
+ * Check if a change has unsynced artifact files.
+ * Returns true if any .spec-delta.md or .new-spec.md file in the change dir
+ * has syncStatus "pending" (or no syncStatus, defaulting to pending).
  */
 export function hasUnsyncedDeltas(changeDir: string): boolean {
-	const specsDir = join(changeDir, "specs");
-	if (!existsSync(specsDir)) {
+	if (!existsSync(changeDir)) {
 		return false;
 	}
 
-	const entries = readdirSync(specsDir, { withFileTypes: true });
-	return entries.some((entry) => entry.isDirectory());
+	const entries = readdirSync(changeDir, { withFileTypes: true });
+	return entries.some((entry) => {
+		if (entry.isFile() && (entry.name.endsWith(".spec-delta.md") || entry.name.endsWith(".new-spec.md"))) {
+			const filePath = join(changeDir, entry.name);
+			try {
+				const content = readFileSync(filePath, "utf-8");
+				const doc = parseDocument(content);
+				// Default to "pending" if syncStatus is not set
+				return doc.syncStatus !== "synced";
+			} catch {
+				return true; // Can't parse → assume unsynced
+			}
+		}
+		return false;
+	});
 }
 
 /**

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import matter from "gray-matter";
@@ -103,6 +104,11 @@ export class FileSystem {
 
 	get docsDir(): string {
 		return join(this.resolvedBacklogDir, DEFAULT_DIRECTORIES.DOCS);
+	}
+
+	/** Directory for published spec Documents at project root */
+	get specsDir(): string {
+		return join(this.projectRoot, "specs");
 	}
 
 	get milestonesDir(): string {
@@ -765,56 +771,97 @@ export class FileSystem {
 	}
 
 	// Document operations
-	async saveDocument(document: Document, subPath = ""): Promise<string> {
-		const docsDir = await this.getDocsDir();
+
+	/**
+	 * Resolve the base directory for a Document type.
+	 * - specification → specs/ at project root
+	 * - spec-delta/new-spec → throws (must use directory override)
+	 * - readme, guide, other → backlog/docs/
+	 */
+	private resolveDocumentDir(type: Document["type"]): string {
+		switch (type) {
+			case "specification":
+				return this.specsDir;
+			case "spec-delta":
+			case "new-spec":
+				throw new Error("Use directory parameter for change artifact Documents (spec-delta/new-spec)");
+			default:
+				return this.docsDir;
+		}
+	}
+
+	async saveDocument(document: Document, subPath = "", directory?: string): Promise<string> {
+		const baseDir = directory ?? this.resolveDocumentDir(document.type);
 		const canonicalId = normalizeDocumentId(document.id);
 		document.id = canonicalId;
-		const filename = `${canonicalId} - ${this.sanitizeFilename(document.title)}.md`;
-		const normalizedSubPath = normalizeDocumentSubPath(subPath);
-		const relativePath = normalizedSubPath ? `${normalizedSubPath}/${filename}` : filename;
-		const filepath = join(docsDir, ...relativePath.split("/"));
+
+		let filename: string;
+		let relativePath: string;
+
+		if (directory) {
+			// Change artifacts: use <title>.type.md naming, no ID in filename
+			const typeSuffix = document.type === "spec-delta" ? "spec-delta" : "new-spec";
+			filename = `${this.sanitizeFilename(document.title)}.${typeSuffix}.md`;
+			relativePath = filename;
+		} else if (document.type === "specification") {
+			// Published specs: SPC-<id> - <title>.md in baseDir
+			const suffix = canonicalId.replace(/^SPC-/i, "");
+			filename = `SPC-${suffix} - ${this.sanitizeFilename(document.title)}.md`;
+			relativePath = filename;
+		} else {
+			// Regular docs: <canonicalId> - <title>.md with subPath
+			filename = `${canonicalId} - ${this.sanitizeFilename(document.title)}.md`;
+			const normalizedSubPath = normalizeDocumentSubPath(subPath);
+			relativePath = normalizedSubPath ? `${normalizedSubPath}/${filename}` : filename;
+		}
+
+		const filepath = join(baseDir, ...relativePath.split("/"));
 		const content = serializeDocument(document);
 
 		await this.ensureDirectoryExists(dirname(filepath));
 
-		const glob = new Bun.Glob("**/doc-*.md");
-		const existingMatches = (await Array.fromAsync(glob.scan({ cwd: docsDir, followSymlinks: true }))).map((relative) =>
-			normalizeDocumentRelativePath(relative),
-		);
-		const matchesForId = existingMatches.filter((relative) => {
-			const base = relative.split("/").pop() || relative;
-			const [candidateId] = base.split(" - ");
-			if (!candidateId) return false;
-			return documentIdsEqual(canonicalId, candidateId);
-		});
+		if (!directory) {
+			// Only do ID-based dedup for non-change artifacts (change artifacts are transient)
+			const glob = new Bun.Glob(document.type === "specification" ? "SPC-*.md" : "**/doc-*.md");
+			const scanDir = document.type === "specification" ? baseDir : this.docsDir;
+			const existingMatches = (await Array.fromAsync(glob.scan({ cwd: scanDir, followSymlinks: true }))).map(
+				(relative) => normalizeDocumentRelativePath(relative),
+			);
+			const matchesForId = existingMatches.filter((relative) => {
+				const base = relative.split("/").pop() || relative;
+				const [candidateId] = base.split(" - ");
+				if (!candidateId) return false;
+				return documentIdsEqual(canonicalId, candidateId);
+			});
 
-		let sourceRelativePath = document.path ? normalizeDocumentRelativePath(document.path) : undefined;
-		if (!sourceRelativePath && matchesForId.length > 0) {
-			sourceRelativePath = normalizeDocumentRelativePath(matchesForId[0] ?? "");
-		}
+			let sourceRelativePath = document.path ? normalizeDocumentRelativePath(document.path) : undefined;
+			if (!sourceRelativePath && matchesForId.length > 0) {
+				sourceRelativePath = normalizeDocumentRelativePath(matchesForId[0] ?? "");
+			}
 
-		if (sourceRelativePath && sourceRelativePath !== relativePath) {
-			const sourcePath = join(docsDir, ...sourceRelativePath.split("/"));
-			try {
-				await this.ensureDirectoryExists(dirname(filepath));
-				await rename(sourcePath, filepath);
-			} catch (error) {
-				const code = (error as NodeJS.ErrnoException | undefined)?.code;
-				if (code !== "ENOENT") {
-					throw error;
+			if (sourceRelativePath && sourceRelativePath !== relativePath) {
+				const sourcePath = join(scanDir, ...sourceRelativePath.split("/"));
+				try {
+					await this.ensureDirectoryExists(dirname(filepath));
+					await rename(sourcePath, filepath);
+				} catch (error) {
+					const code = (error as NodeJS.ErrnoException | undefined)?.code;
+					if (code !== "ENOENT") {
+						throw error;
+					}
 				}
 			}
-		}
 
-		for (const match of matchesForId) {
-			const matchPath = join(docsDir, ...normalizeDocumentRelativePath(match).split("/"));
-			if (matchPath === filepath) {
-				continue;
-			}
-			try {
-				await unlink(matchPath);
-			} catch {
-				// Ignore cleanup errors - file may have been removed already
+			for (const match of matchesForId) {
+				const matchPath = join(scanDir, ...normalizeDocumentRelativePath(match).split("/"));
+				if (matchPath === filepath) {
+					continue;
+				}
+				try {
+					await unlink(matchPath);
+				} catch {
+					// Ignore cleanup errors - file may have been removed already
+				}
 			}
 		}
 
@@ -849,28 +896,51 @@ export class FileSystem {
 	async listDocuments(status?: string): Promise<Document[]> {
 		try {
 			const docsDir = await this.getDocsDir();
-			// Recursively include all markdown files under docs, excluding README.md variants
-			const glob = new Bun.Glob("**/*.md");
-			const docFiles = await Array.fromAsync(glob.scan({ cwd: docsDir, followSymlinks: true }));
-			const docs: Document[] = [];
-			for (const file of docFiles) {
-				const relativePath = normalizeDocumentRelativePath(file);
-				const base = relativePath.split("/").pop() || relativePath;
-				if (base.toLowerCase() === "readme.md") continue;
-				const filepath = join(docsDir, ...relativePath.split("/"));
-				const content = await Bun.file(filepath).text();
-				const parsed = parseDocument(content);
-				const doc: Document = {
-					...parsed,
-					path: relativePath,
-				};
-				if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
-					docs.push(doc);
+			const specsDir = this.specsDir;
+			const allDocs: Document[] = [];
+
+			// Scan backlog/docs/
+			if (existsSync(docsDir)) {
+				const glob = new Bun.Glob("**/*.md");
+				const docFiles = await Array.fromAsync(glob.scan({ cwd: docsDir, followSymlinks: true }));
+				for (const file of docFiles) {
+					const relativePath = normalizeDocumentRelativePath(file);
+					const base = relativePath.split("/").pop() || relativePath;
+					if (base.toLowerCase() === "readme.md") continue;
+					const filepath = join(docsDir, ...relativePath.split("/"));
+					const content = await Bun.file(filepath).text();
+					const parsed = parseDocument(content);
+					const doc: Document = {
+						...parsed,
+						path: relativePath,
+					};
+					if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
+						allDocs.push(doc);
+					}
+				}
+			}
+
+			// Scan specs/
+			if (existsSync(specsDir)) {
+				const glob = new Bun.Glob("*.md");
+				const specFiles = await Array.fromAsync(glob.scan({ cwd: specsDir, followSymlinks: true }));
+				for (const file of specFiles) {
+					if (file.toLowerCase() === "readme.md") continue;
+					const filepath = join(specsDir, file);
+					const content = await Bun.file(filepath).text();
+					const parsed = parseDocument(content);
+					const doc: Document = {
+						...parsed,
+						path: file,
+					};
+					if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
+						allDocs.push(doc);
+					}
 				}
 			}
 
 			// Stable sort by title for UI/CLI listing
-			return docs.sort((a, b) => a.title.localeCompare(b.title));
+			return allDocs.sort((a, b) => a.title.localeCompare(b.title));
 		} catch {
 			return [];
 		}

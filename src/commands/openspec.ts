@@ -10,9 +10,8 @@ import { requireProjectRoot } from "../cli.ts";
 import { Core } from "../core/backlog.ts";
 import { archiveChange } from "../openspec/archive.ts";
 import { CHANGE_ARTIFACTS, computeArtifactStatus, detectCompleted } from "../openspec/change-checklist.ts";
-import { parseChange } from "../openspec/parsers/change-parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
-import { ChangeSchema, RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
+import { RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
 import { buildDeltaSpecWithEntry, removeDeltaByIndex } from "../openspec/serializers.ts";
 import { syncSpecs } from "../openspec/sync.ts";
 import type { Document } from "../types/index.ts";
@@ -34,15 +33,6 @@ The system SHALL satisfy this requirement.
 GIVEN a starting state
 WHEN an action occurs
 THEN an expected outcome happens
-`;
-
-const PROPOSAL_TEMPLATE = `## Why
-
-Explain the motivation and background for this change. Why is it needed? What problem does it solve? This section should be at least 50 characters.
-
-## What Changes
-
-Summarize the changes being proposed. What deltas will be applied, and to which specs?
 `;
 
 /**
@@ -67,6 +57,18 @@ export function findLineNumber(content: string, text: string): number {
  */
 function changeDir(name: string, projectRoot: string): string {
 	return join(projectRoot, "backlog", "changes", name);
+}
+
+/**
+ * Generate a date-prefixed change directory name.
+ * Format: YYYY-MM-DD-<name>
+ */
+export function datedChangeDirName(name: string): string {
+	const now = new Date();
+	const yyyy = now.getFullYear();
+	const mm = String(now.getMonth() + 1).padStart(2, "0");
+	const dd = String(now.getDate()).padStart(2, "0");
+	return `${yyyy}-${mm}-${dd}-${name}`;
 }
 
 /**
@@ -110,71 +112,6 @@ function validateSpecContent(content: string, name: string): string[] {
 			const line = findLineNumber(content, purposeMatch?.[1] ?? "");
 			const lineInfo = line !== -1 ? ` (line ${line})` : "";
 			errors.push(`  - ${pathStr}: ${issue.message}${lineInfo}`);
-		}
-	}
-
-	return errors;
-}
-
-/**
- * Validate change proposal content against ChangeSchema.
- * Returns array of error strings (empty = valid).
- */
-async function validateChangeContent(content: string, changeName: string, projectRoot: string): Promise<string[]> {
-	const errors: string[] = [];
-
-	const parsed = parseChange(content);
-
-	const changeInput: Record<string, unknown> = {
-		name: changeName,
-		why: parsed.why,
-		whatChanges: parsed.whatChanges,
-		deltas: parsed.deltas.map((delta) => ({
-			spec: delta.spec,
-			operation: delta.operation,
-			description: delta.description,
-			requirements: delta.requirements,
-			rename: delta.rename,
-		})),
-	};
-
-	const result = ChangeSchema.safeParse(changeInput);
-	if (!result.success) {
-		for (const issue of result.error.issues) {
-			const pathStr = issue.path.join(".");
-			const line = findLineNumber(content, issue.message);
-			const lineInfo = line !== -1 ? ` (line ${line})` : "";
-			errors.push(`  - ${pathStr}: ${issue.message}${lineInfo}`);
-		}
-	}
-
-	// Also validate delta spec files if they exist
-	const specsDir = join(changeDir(changeName, projectRoot), "specs");
-	if (existsSync(specsDir)) {
-		let specFiles: string[];
-		try {
-			const entries = await readdir(specsDir);
-			specFiles = entries.filter((f) => f.endsWith(".md"));
-		} catch {
-			specFiles = [];
-		}
-
-		for (const specFile of specFiles) {
-			const specFilePath = join(specsDir, specFile);
-			try {
-				const specContent = await Bun.file(specFilePath).text();
-				const deltaPlan = parseDeltaSpec(specContent);
-				if (
-					deltaPlan.added.length === 0 &&
-					deltaPlan.modified.length === 0 &&
-					deltaPlan.removed.length === 0 &&
-					deltaPlan.renamed.length === 0
-				) {
-					errors.push(`  - ${specFile}: no recognized delta sections found`);
-				}
-			} catch (err) {
-				errors.push(`  - ${specFile}: failed to parse - ${err instanceof Error ? err.message : String(err)}`);
-			}
 		}
 	}
 
@@ -284,61 +221,83 @@ export function registerChangeCommand(program: Command): void {
 
 	changeCmd
 		.command("create <name>")
-		.description("scaffold a new change set")
+		.description("scaffold a new change set with date-prefixed directory")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
-			const core = new Core(projectRoot);
-			const dir = changeDir(name, projectRoot);
+			const dirName = datedChangeDirName(name);
+			const dir = changeDir(dirName, projectRoot);
 
 			if (existsSync(dir)) {
-				console.error(`Change "${name}" already exists at ${dir.replace(projectRoot, ".")}`);
+				console.error(`Change "${dirName}" already exists at ${dir.replace(projectRoot, ".")}`);
 				process.exit(1);
 			}
 
-			// Create proposal as a Document (type: other) in backlog/docs/
-			const doc = await core.createDocumentFromInput({
-				title: `Change: ${name}`,
-				type: "other",
-				status: "draft",
-				content: PROPOSAL_TEMPLATE,
-			});
+			await mkdir(dir, { recursive: true });
 
-			// Still create backlog/changes/<name>/ for delta specs and DAG files
-			const specsDir = join(dir, "specs");
-			await mkdir(specsDir, { recursive: true });
-
-			console.log(`Created change "${name}" as document ${doc.id} in backlog/docs/`);
-			console.log(`  Delta specs: ${specsDir.replace(projectRoot, ".")}`);
+			console.log(`Created change "${dirName}" at ${dir.replace(projectRoot, ".")}/`);
+			console.log("  Add spec-delta or new-spec files with `backlog change delta add`");
 		});
 
 	changeCmd
 		.command("validate <name>")
-		.description("validate a change set")
+		.description("validate a change set's artifact files")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
-			const core = new Core(projectRoot);
+			const dir = changeDir(name, projectRoot);
 
-			// Read proposal content from the Document in backlog/docs/
-			const docs = await core.filesystem.listDocuments();
-			const changeDoc = docs.find(
-				(d) => d.title.toLowerCase() === `change: ${name}`.toLowerCase() && d.type === "other",
-			);
-			if (!changeDoc) {
-				console.error(`Change proposal "${name}" not found in backlog/docs/.`);
-				console.error("Run `backlog change create <name>` to scaffold a new change set.");
+			if (!existsSync(dir)) {
+				console.error(`Change "${name}" not found at ${dir.replace(projectRoot, ".")}`);
 				process.exit(1);
 			}
 
-			const content = changeDoc.rawContent;
-			const errors = await validateChangeContent(content, name, projectRoot);
+			const entries = await readdir(dir);
+			const deltaFiles = entries.filter((e) => e.endsWith(".spec-delta.md"));
+			const newSpecFiles = entries.filter((e) => e.endsWith(".new-spec.md"));
 
-			if (errors.length === 0) {
-				console.log(`✓ Change "${name}" is valid`);
-			} else {
-				console.error(`✗ Change "${name}" has validation errors:`);
-				for (const err of errors) {
-					console.error(err);
+			if (deltaFiles.length === 0 && newSpecFiles.length === 0) {
+				console.log(`No artifact files found in change "${name}".`);
+				return;
+			}
+
+			let hasErrors = false;
+
+			for (const f of [...deltaFiles, ...newSpecFiles]) {
+				try {
+					const filePath = join(dir, f);
+					const fcontent = await Bun.file(filePath).text();
+
+					if (f.endsWith(".spec-delta.md")) {
+						const deltaPlan = parseDeltaSpec(fcontent);
+						if (
+							deltaPlan.added.length === 0 &&
+							deltaPlan.modified.length === 0 &&
+							deltaPlan.removed.length === 0 &&
+							deltaPlan.renamed.length === 0
+						) {
+							console.error(`  ✗ ${f}: no recognized delta sections found`);
+							hasErrors = true;
+						} else {
+							console.log(`  ✓ ${f}: valid`);
+						}
+					} else {
+						const { parseMarkdown } = await import("../markdown/parser.ts");
+						const { content: body } = parseMarkdown(fcontent);
+						if (!body.includes("## Purpose") || !body.includes("## Requirements")) {
+							console.error(`  ✗ ${f}: missing ## Purpose or ## Requirements section`);
+							hasErrors = true;
+						} else {
+							console.log(`  ✓ ${f}: valid`);
+						}
+					}
+				} catch (err) {
+					console.error(`  ✗ ${f}: failed to parse - ${err instanceof Error ? err.message : String(err)}`);
+					hasErrors = true;
 				}
+			}
+
+			if (!hasErrors) {
+				console.log(`✓ Change "${name}" is valid (${deltaFiles.length + newSpecFiles.length} artifact(s))`);
+			} else {
 				process.exitCode = 1;
 			}
 		});
@@ -581,12 +540,9 @@ export function registerChangeCommand(program: Command): void {
 					}
 				}
 
-				// Ensure specs/<spec>/ directory exists
-				const specDirPath = join(changePath, "specs", specName);
-				await mkdir(specDirPath, { recursive: true });
-
-				const specFilePath = join(specDirPath, "spec.md");
-				const existingContent = existsSync(specFilePath) ? await Bun.file(specFilePath).text() : "";
+				const changeRoot = changeDir(change, projectRoot);
+				const specDeltaPath = join(changeRoot, `${specName}.spec-delta.md`);
+				const existingContent = existsSync(specDeltaPath) ? await Bun.file(specDeltaPath).text() : "";
 
 				const entryName = options.req ?? specName;
 				const newContent = buildDeltaSpecWithEntry(existingContent, {
@@ -598,8 +554,8 @@ export function registerChangeCommand(program: Command): void {
 					renameTo: options.renameTo,
 				});
 
-				await writeFile(specFilePath, newContent, "utf-8");
-				console.log(`Added ${operation} delta "${entryName}" to ${specFilePath.replace(projectRoot, ".")}`);
+				await writeFile(specDeltaPath, newContent, "utf-8");
+				console.log(`Added ${operation} delta "${entryName}" to ${specDeltaPath.replace(projectRoot, ".")}`);
 			},
 		);
 
@@ -616,13 +572,8 @@ export function registerChangeCommand(program: Command): void {
 				process.exit(1);
 			}
 
-			const specsDir = join(changePath, "specs");
-			if (!existsSync(specsDir)) {
-				console.log(`No delta specs found for change "${change}".`);
-				return;
-			}
-
-			const specDirs = await readdir(specsDir);
+			const entries = await readdir(changePath);
+			const deltaFiles = entries.filter((e) => e.endsWith(".spec-delta.md")).sort();
 			let flatIndex = 1;
 			const result: Array<{
 				index: number;
@@ -632,10 +583,9 @@ export function registerChangeCommand(program: Command): void {
 				description: string;
 			}> = [];
 
-			for (const specName of specDirs) {
-				const specFilePath = join(specsDir, specName, "spec.md");
-				if (!existsSync(specFilePath)) continue;
-
+			for (const deltaFile of deltaFiles) {
+				const specFilePath = join(changePath, deltaFile);
+				const specName = deltaFile.slice(0, -".spec-delta.md".length);
 				const content = await Bun.file(specFilePath).text();
 				const deltaPlan = parseDeltaSpec(content);
 				const sections: Array<{ operation: string; entries: Array<{ name: string; description: string }> }> = [
@@ -716,18 +666,13 @@ export function registerChangeCommand(program: Command): void {
 				process.exit(1);
 			}
 
-			// Walk through all spec dirs to find the entry by flat index
-			const specsDir = join(changePath, "specs");
-			if (!existsSync(specsDir)) {
-				console.error(`No specs found for change "${change}".`);
-				process.exit(1);
-			}
-
-			const specDirs = await readdir(specsDir);
+			// Walk through all spec-delta files to find the entry by flat index
+			const entries = await readdir(changePath);
+			const deltaFiles = entries.filter((e) => e.endsWith(".spec-delta.md")).sort();
 			let remaining = index;
 
-			for (const specName of specDirs) {
-				const specFilePath = join(specsDir, specName, "spec.md");
+			for (const deltaFile of deltaFiles) {
+				const specFilePath = join(changePath, deltaFile);
 				if (!existsSync(specFilePath)) continue;
 
 				const content = await Bun.file(specFilePath).text();

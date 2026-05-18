@@ -1,8 +1,7 @@
 /**
- * Tests for the flat change checklist module.
+ * Tests for the flat change checklist module (v2).
  *
- * Replaces openspec-artifact-graph.test.ts and openspec-change-status.test.ts.
- * Tests pure status computation (no filesystem) and file-existence detection (tmpdir).
+ * 2 artifacts: deltas (spec-delta files), new-specs (new-spec files).
  */
 
 import { describe, expect, it } from "bun:test";
@@ -35,66 +34,31 @@ function cleanupDir(dir: string): void {
 
 describe("computeArtifactStatus", () => {
 	it("all done when all artifact IDs in completed set", () => {
-		const completed = new Set(["proposal", "deltas", "design", "publish"]);
+		const completed = new Set(["deltas", "new-specs"]);
 		const statuses = computeArtifactStatus(completed);
 
 		expect(statuses.every((s) => s.status === "done")).toBe(true);
-		expect(statuses).toHaveLength(4);
+		expect(statuses).toHaveLength(2);
 	});
 
-	it("nothing done: roots ready, publish blocked", () => {
+	it("nothing done: both ready (no dependencies)", () => {
 		const completed = new Set<string>();
 		const statuses = computeArtifactStatus(completed);
 
 		expect(statuses).toEqual([
-			{ id: "proposal", label: "Proposal", status: "ready" },
 			{ id: "deltas", label: "Delta specs", status: "ready" },
-			{ id: "design", label: "Design doc", status: "ready" },
-			{ id: "publish", label: "Published docs", status: "blocked", missingDeps: ["design"] },
+			{ id: "new-specs", label: "New specs", status: "ready" },
 		]);
 	});
 
-	it("root only completed → publish stays blocked", () => {
-		const completed = new Set(["proposal"]);
+	it("partial completion: one done, one ready", () => {
+		const completed = new Set(["deltas"]);
 		const statuses = computeArtifactStatus(completed);
 
 		expect(statuses).toEqual([
-			{ id: "proposal", label: "Proposal", status: "done" },
-			{ id: "deltas", label: "Delta specs", status: "ready" },
-			{ id: "design", label: "Design doc", status: "ready" },
-			{ id: "publish", label: "Published docs", status: "blocked", missingDeps: ["design"] },
-		]);
-	});
-
-	it("middle done → publish becomes ready", () => {
-		const completed = new Set(["proposal", "deltas", "design"]);
-		const statuses = computeArtifactStatus(completed);
-
-		expect(statuses).toEqual([
-			{ id: "proposal", label: "Proposal", status: "done" },
 			{ id: "deltas", label: "Delta specs", status: "done" },
-			{ id: "design", label: "Design doc", status: "done" },
-			{ id: "publish", label: "Published docs", status: "ready" },
+			{ id: "new-specs", label: "New specs", status: "ready" },
 		]);
-	});
-
-	it("parallel artifacts (deltas, design) both ready from root", () => {
-		const completed = new Set(["proposal"]);
-		const statuses = computeArtifactStatus(completed);
-
-		const deltas = statuses.find((s) => s.id === "deltas");
-		const design = statuses.find((s) => s.id === "design");
-		expect(deltas?.status).toBe("ready");
-		expect(design?.status).toBe("ready");
-	});
-
-	it("blocked shows correct missingDeps for publish", () => {
-		const completed = new Set<string>();
-		const statuses = computeArtifactStatus(completed);
-
-		const publish = statuses.find((s) => s.id === "publish");
-		expect(publish?.status).toBe("blocked");
-		expect(publish?.missingDeps).toEqual(["design"]);
 	});
 
 	it("uses custom artifact list when provided", () => {
@@ -116,12 +80,12 @@ describe("computeArtifactStatus", () => {
 
 describe("isChangeComplete", () => {
 	it("returns true when all artifact IDs in completed set", () => {
-		const completed = new Set(["proposal", "deltas", "design", "publish"]);
+		const completed = new Set(["deltas", "new-specs"]);
 		expect(isChangeComplete(completed)).toBe(true);
 	});
 
 	it("returns false when partial set", () => {
-		const completed = new Set(["proposal"]);
+		const completed = new Set(["deltas"]);
 		expect(isChangeComplete(completed)).toBe(false);
 	});
 
@@ -142,7 +106,7 @@ describe("isChangeComplete", () => {
 
 describe("isGlobPattern", () => {
 	it("detects * pattern", () => {
-		expect(isGlobPattern("specs/**/*.md")).toBe(true);
+		expect(isGlobPattern("*.spec-delta.md")).toBe(true);
 	});
 
 	it("detects ? pattern", () => {
@@ -154,72 +118,35 @@ describe("isGlobPattern", () => {
 	});
 
 	it("returns false for plain path", () => {
-		expect(isGlobPattern("proposal.md")).toBe(false);
-		expect(isGlobPattern("design.md")).toBe(false);
+		expect(isGlobPattern("plain.md")).toBe(false);
 	});
 });
 
 // ─── File-existence detection tests: detectCompleted ───
 
 describe("detectCompleted", () => {
-	it("proposal complete when proposal.md exists in change dir", () => {
-		const dir = makeTestDir("proposal-done");
-		writeFileSync(join(dir, "proposal.md"), "content");
-
-		const completed = detectCompleted(CHANGE_ARTIFACTS, dir);
-
-		expect(completed.has("proposal")).toBe(true);
-		expect(completed.has("deltas")).toBe(false);
-		expect(completed.has("design")).toBe(false);
-		expect(completed.has("publish")).toBe(false);
-
-		cleanupDir(dir);
-	});
-
-	it("deltas complete with glob matching spec files", () => {
-		const dir = makeTestDir("deltas-glob");
-		mkdirSync(join(dir, "specs"), { recursive: true });
-		writeFileSync(join(dir, "specs", "auth.md"), "content");
-		writeFileSync(join(dir, "specs", "api.md"), "content");
+	it("deltas complete when .spec-delta.md file exists in change dir", () => {
+		const dir = makeTestDir("deltas-done");
+		writeFileSync(join(dir, "auth.spec-delta.md"), "content");
 
 		const completed = detectCompleted(CHANGE_ARTIFACTS, dir);
 
 		expect(completed.has("deltas")).toBe(true);
-		expect(completed.has("proposal")).toBe(false);
+		expect(completed.has("new-specs")).toBe(false);
 
 		cleanupDir(dir);
 	});
 
-	it("publish complete with projectRoot-relative glob", () => {
-		const dir = makeTestDir("publish-root-relative");
-		const projectRoot = dir;
-		const backlogDocsDir = join(dir, "backlog", "docs");
-		mkdirSync(backlogDocsDir, { recursive: true });
-		writeFileSync(join(backlogDocsDir, "guide.md"), "content");
+	it("new-specs complete when .new-spec.md file exists", () => {
+		const dir = makeTestDir("new-specs-done");
+		writeFileSync(join(dir, "billing.new-spec.md"), "content");
 
-		const completed = detectCompleted(CHANGE_ARTIFACTS, dir, projectRoot);
+		const completed = detectCompleted(CHANGE_ARTIFACTS, dir);
 
-		expect(completed.has("publish")).toBe(true);
+		expect(completed.has("new-specs")).toBe(true);
+		expect(completed.has("deltas")).toBe(false);
 
 		cleanupDir(dir);
-	});
-
-	it("publish NOT complete without projectRoot arg", () => {
-		// When projectRoot is not passed, publish's backlog/docs/** /* glob is resolved
-		// against changeDir. If changeDir is NOT the project root, the glob won't match.
-		const tempRoot = makeTestDir("publish-root");
-		const changeDir = join(tempRoot, "backlog", "changes", "my-change");
-		mkdirSync(changeDir, { recursive: true });
-		const backlogDocsDir = join(tempRoot, "backlog", "docs");
-		mkdirSync(backlogDocsDir, { recursive: true });
-		writeFileSync(join(backlogDocsDir, "guide.md"), "content");
-
-		// changeDir is a subdir of tempRoot, so backlog/docs/guide.md lives outside changeDir
-		const completed = detectCompleted(CHANGE_ARTIFACTS, changeDir);
-
-		expect(completed.has("publish")).toBe(false);
-
-		cleanupDir(tempRoot);
 	});
 
 	it("missing change dir returns empty set", () => {
@@ -238,25 +165,15 @@ describe("detectCompleted", () => {
 		cleanupDir(dir);
 	});
 
-	it("all 4 artifacts detected when all files present", () => {
-		const dir = makeTestDir("all-four");
-		const projectRoot = dir;
+	it("both artifacts detected when both file types present", () => {
+		const dir = makeTestDir("both-artifacts");
 
-		// proposal
-		writeFileSync(join(dir, "proposal.md"), "content");
-		// deltas
-		mkdirSync(join(dir, "specs"), { recursive: true });
-		writeFileSync(join(dir, "specs", "auth.md"), "content");
-		// design
-		writeFileSync(join(dir, "design.md"), "content");
-		// publish
-		const backlogDocsDir = join(dir, "backlog", "docs");
-		mkdirSync(backlogDocsDir, { recursive: true });
-		writeFileSync(join(backlogDocsDir, "guide.md"), "content");
+		writeFileSync(join(dir, "auth.spec-delta.md"), "content");
+		writeFileSync(join(dir, "billing.new-spec.md"), "content");
 
-		const completed = detectCompleted(CHANGE_ARTIFACTS, dir, projectRoot);
+		const completed = detectCompleted(CHANGE_ARTIFACTS, dir);
 
-		expect(completed).toEqual(new Set(["proposal", "deltas", "design", "publish"]));
+		expect(completed).toEqual(new Set(["deltas", "new-specs"]));
 
 		cleanupDir(dir);
 	});
@@ -265,24 +182,10 @@ describe("detectCompleted", () => {
 // ─── File-existence tests: resolveArtifactOutputs ───
 
 describe("resolveArtifactOutputs", () => {
-	it("resolves simple non-glob path", () => {
-		const dir = makeTestDir("simple-path");
-		writeFileSync(join(dir, "proposal.md"), "content");
-
-		const proposal = CHANGE_ARTIFACTS.find((a) => a.id === "proposal")!;
-		const outputs = resolveArtifactOutputs(dir, proposal);
-
-		expect(outputs).toHaveLength(1);
-		expect(outputs[0]).toEndWith("proposal.md");
-
-		cleanupDir(dir);
-	});
-
-	it("resolves glob pattern to multiple files", () => {
-		const dir = makeTestDir("glob-multi");
-		mkdirSync(join(dir, "specs"), { recursive: true });
-		writeFileSync(join(dir, "specs", "auth.md"), "content");
-		writeFileSync(join(dir, "specs", "api.md"), "content");
+	it("resolves glob pattern for spec-delta files", () => {
+		const dir = makeTestDir("glob-spec-delta");
+		writeFileSync(join(dir, "auth.spec-delta.md"), "content");
+		writeFileSync(join(dir, "api.spec-delta.md"), "content");
 
 		const deltas = CHANGE_ARTIFACTS.find((a) => a.id === "deltas")!;
 		const outputs = resolveArtifactOutputs(dir, deltas);
@@ -292,26 +195,23 @@ describe("resolveArtifactOutputs", () => {
 		cleanupDir(dir);
 	});
 
-	it("resolves projectRootRelative artifact against project root", () => {
-		const dir = makeTestDir("proj-rel");
-		const backlogDocs = join(dir, "backlog", "docs");
-		mkdirSync(backlogDocs, { recursive: true });
-		writeFileSync(join(backlogDocs, "guide.md"), "content");
+	it("resolves glob pattern for new-spec files", () => {
+		const dir = makeTestDir("glob-new-spec");
+		writeFileSync(join(dir, "billing.new-spec.md"), "content");
 
-		const publish = CHANGE_ARTIFACTS.find((a) => a.id === "publish")!;
-		const outputs = resolveArtifactOutputs(dir, publish, dir);
+		const newSpecs = CHANGE_ARTIFACTS.find((a) => a.id === "new-specs")!;
+		const outputs = resolveArtifactOutputs(dir, newSpecs);
 
 		expect(outputs).toHaveLength(1);
-		expect(outputs[0]).toContain("backlog/docs/guide.md");
 
 		cleanupDir(dir);
 	});
 
-	it("returns empty array for nonexistent file", () => {
+	it("returns empty array for nonexistent files", () => {
 		const dir = makeTestDir("nonexistent");
 
-		const proposal = CHANGE_ARTIFACTS.find((a) => a.id === "proposal")!;
-		const outputs = resolveArtifactOutputs(dir, proposal);
+		const deltas = CHANGE_ARTIFACTS.find((a) => a.id === "deltas")!;
+		const outputs = resolveArtifactOutputs(dir, deltas);
 
 		expect(outputs).toEqual([]);
 
@@ -340,37 +240,27 @@ describe("resolveArtifactOutputs", () => {
 // ─── Integration: detectCompleted + computeArtifactStatus end-to-end ───
 
 describe("detectCompleted + computeArtifactStatus integration", () => {
-	it("produces correct statuses when proposal and design exist", () => {
+	it("produces correct statuses when only spec-delta exists", () => {
 		const dir = makeTestDir("int-partial");
-		writeFileSync(join(dir, "proposal.md"), "content");
-		writeFileSync(join(dir, "design.md"), "content");
+		writeFileSync(join(dir, "auth.spec-delta.md"), "content");
 
 		const completed = detectCompleted(CHANGE_ARTIFACTS, dir);
 		const statuses = computeArtifactStatus(completed);
 
-		expect(statuses.find((s) => s.id === "proposal")?.status).toBe("done");
-		expect(statuses.find((s) => s.id === "deltas")?.status).toBe("ready");
-		expect(statuses.find((s) => s.id === "design")?.status).toBe("done");
-		expect(statuses.find((s) => s.id === "publish")?.status).toBe("ready");
-
+		expect(statuses.find((s) => s.id === "deltas")?.status).toBe("done");
+		expect(statuses.find((s) => s.id === "new-specs")?.status).toBe("ready");
 		expect(isChangeComplete(completed)).toBe(false);
 
 		cleanupDir(dir);
 	});
 
-	it("produces correct statuses when all files present", () => {
+	it("produces correct statuses when all artifacts present", () => {
 		const dir = makeTestDir("int-all-done");
-		const projectRoot = dir;
 
-		writeFileSync(join(dir, "proposal.md"), "content");
-		mkdirSync(join(dir, "specs"), { recursive: true });
-		writeFileSync(join(dir, "specs", "auth.md"), "content");
-		writeFileSync(join(dir, "design.md"), "content");
-		const backlogDocs = join(dir, "backlog", "docs");
-		mkdirSync(backlogDocs, { recursive: true });
-		writeFileSync(join(backlogDocs, "guide.md"), "content");
+		writeFileSync(join(dir, "auth.spec-delta.md"), "content");
+		writeFileSync(join(dir, "billing.new-spec.md"), "content");
 
-		const completed = detectCompleted(CHANGE_ARTIFACTS, dir, projectRoot);
+		const completed = detectCompleted(CHANGE_ARTIFACTS, dir);
 		const statuses = computeArtifactStatus(completed);
 
 		expect(statuses.every((s) => s.status === "done")).toBe(true);

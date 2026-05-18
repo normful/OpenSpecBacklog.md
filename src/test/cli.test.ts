@@ -1393,14 +1393,14 @@ describe("CLI Integration", () => {
 					.quiet();
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout.toString()).toContain("Updated document doc-1");
-			expect(result.stdout.toString()).toContain("Path: backlog/docs/runbooks/doc-1 - Install-Runbook.md");
+			expect(result.stdout.toString()).toContain("SPC-doc-1 - Install-Runbook.md");
 
 			const docs = await core.filesystem.listDocuments();
 			const updated = docs.find((doc) => doc.id === "doc-1");
 			expect(updated?.title).toBe("Install Runbook");
 			expect(updated?.type).toBe("specification");
 			expect(updated?.tags).toEqual(["ops", "runbook"]);
-			expect(updated?.path).toBe("runbooks/doc-1 - Install-Runbook.md");
+			expect(updated?.path).toBe("SPC-doc-1 - Install-Runbook.md");
 			expect(updated?.rawContent).toBe(updatedContent);
 		});
 
@@ -1453,7 +1453,7 @@ describe("CLI Integration", () => {
 				.nothrow();
 			expect(invalidType.exitCode).not.toBe(0);
 			expect(invalidType.stderr.toString()).toContain(
-				"Document type must be one of: readme, guide, specification, other.",
+				"Document type must be one of: readme, guide, specification, other, spec-delta, new-spec.",
 			);
 
 			const unsafePath = await $`bun ${CLI_PATH} doc update doc-1 --content "Nope" -p ../outside`

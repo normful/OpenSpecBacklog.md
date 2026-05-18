@@ -1,19 +1,22 @@
 /**
- * Sync pipeline for applying delta specs to main spec files.
+ * Sync pipeline for applying change artifacts to published spec Documents.
  * Pure logic — no CLI imports, no side effects.
  *
- * Reads delta spec files from backlog/changes/<name>/specs/<spec>/spec.md,
- * parses them with parseDeltaSpec(), and applies each delta to the corresponding
- * spec Document (type: specification) in backlog/docs/ via Core API.
+ * Reads *.spec-delta.md and *.new-spec.md files from a change directory,
+ * processes them, and writes/updates spec Documents in specs/.
+ * Sync IS publish.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import type { Core } from "../core/backlog.ts";
+import { parseDocument, parseMarkdown } from "../markdown/parser.ts";
+import { serializeDocument } from "../markdown/serializer.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { SpecSchema } from "../openspec/schemas/index.ts";
+import type { Document } from "../types/index.ts";
 
 // ─── Types ───
 
@@ -21,11 +24,15 @@ export interface SyncOptions {
 	dryRun?: boolean;
 }
 
-// ─── Internal helpers ───
+export interface SyncSummary {
+	deltaSpecs: Array<{ file: string; targetSpecId: string; applied: number; errors: string[] }>;
+	newSpecs: Array<{ file: string; specDocId: string; errors: string[] }>;
+}
+
+// ─── Internal helpers (reused from original sync.ts) ───
 
 /**
  * Find the 1-based line number of a text snippet within larger content.
- * Returns -1 if not found (uses exact substring match).
  */
 function findLineNumber(content: string, text: string): number {
 	const lines = content.split("\n");
@@ -46,8 +53,7 @@ function escapeRegex(text: string): string {
 }
 
 /**
- * Validate spec content from spec.md against SpecSchema.
- * Returns array of error strings (empty = valid).
+ * Validate spec content against SpecSchema.
  */
 function validateSpecContent(content: string, name: string): string[] {
 	const errors: string[] = [];
@@ -61,8 +67,6 @@ function validateSpecContent(content: string, name: string): string[] {
 		name,
 		overview: purposeText,
 		requirements: requirementsSection.bodyBlocks.map((block) => {
-			// Extract requirement text from the first non-header content line,
-			// falling back to the header name if no content follows.
 			const lines = block.raw.split("\n").filter((l) => l.trim());
 			const firstLine = lines.length > 1 ? (lines[1]?.trim() ?? "") : "";
 			const text = firstLine || block.name;
@@ -93,7 +97,6 @@ function validateSpecContent(content: string, name: string): string[] {
 /**
  * Find the line range (start inclusive, end exclusive) of a requirement block
  * identified by its header name (case-insensitive match).
- * Returns [startLine, endLine] or null if not found.
  */
 function findRequirementRange(content: string, name: string): [number, number] | null {
 	const headerRegex = new RegExp(`^### Requirement:\\s*${escapeRegex(name)}\\s*$`, "im");
@@ -116,12 +119,8 @@ function findRequirementRange(content: string, name: string): [number, number] |
 	return [startLine, endLine];
 }
 
-// ─── Core sync functions (testable, no CLI deps) ───
+// ─── Delta application functions (unchanged from original) ───
 
-/**
- * Apply ADDED delta: append a new requirement block to ## Requirements.
- * Creates the spec skeleton if content is empty.
- */
 export function applyAdded(content: string, blockRaw: string): { content: string; applied: boolean } {
 	let result = content;
 	if (!result.includes("## Purpose")) {
@@ -135,10 +134,6 @@ export function applyAdded(content: string, blockRaw: string): { content: string
 	return { content: `${result.trimEnd()}${sep}\n\n${blockRaw}\n`, applied: true };
 }
 
-/**
- * Apply MODIFIED delta: find requirement by header name (case-insensitive)
- * and replace the entire block including body.
- */
 export function applyModified(
 	content: string,
 	headerName: string,
@@ -158,10 +153,6 @@ export function applyModified(
 	return { content: `${before}${sep}\n${blockRaw}\n${after}`, applied: true };
 }
 
-/**
- * Apply REMOVED delta: find requirement by header name (case-insensitive)
- * and remove the entire block including body.
- */
 export function applyRemoved(
 	content: string,
 	headerName: string,
@@ -180,10 +171,6 @@ export function applyRemoved(
 	return { content: `${trimmed}\n${after}`, applied: true };
 }
 
-/**
- * Apply RENAMED delta: find requirement header by old name (case-insensitive)
- * and replace it with new name, preserving body content.
- */
 export function applyRenamed(
 	content: string,
 	oldName: string,
@@ -196,10 +183,235 @@ export function applyRenamed(
 	};
 }
 
+// ─── Frontmatter update helper ───
+
 /**
- * Sync deltas from a change's delta specs to spec Documents.
+ * Read a markdown file, parse it as a Document, update syncStatus in frontmatter,
+ * serialize, and write back. Mutates the file on disk.
+ */
+async function updateSyncStatus(filePath: string, newStatus: "pending" | "synced"): Promise<void> {
+	const content = readFileSync(filePath, "utf-8");
+	const doc = parseDocument(content);
+	doc.syncStatus = newStatus;
+	const updated = serializeDocument(doc);
+	await writeFile(filePath, updated, "utf-8");
+}
+
+/**
+ * Read a Document's raw content from a file path.
+ */
+function readDocumentFromFile(filePath: string): Document {
+	const content = readFileSync(filePath, "utf-8");
+	return parseDocument(content);
+}
+
+// ─── spec-delta processing ───
+
+async function processSpecDelta(
+	deltaFilePath: string,
+	core: Core,
+	changePath: string,
+	specsDir: string,
+	isDryRun: boolean,
+): Promise<{ file: string; targetSpecId: string; applied: number; errors: string[] }> {
+	const fileName = basename(deltaFilePath);
+	const errors: string[] = [];
+	let applied = 0;
+
+	// Parse the spec-delta Document and extract target_spec_id from raw frontmatter
+	let deltaDoc: Document;
+	let targetSpecId: string | undefined;
+	try {
+		deltaDoc = readDocumentFromFile(deltaFilePath);
+		// Parse raw frontmatter to extract target_spec_id (not part of the Document interface)
+		const { frontmatter } = parseMarkdown(readFileSync(deltaFilePath, "utf-8"));
+		targetSpecId = frontmatter.target_spec_id ? String(frontmatter.target_spec_id) : undefined;
+	} catch (err) {
+		return { file: fileName, targetSpecId: "?", applied: 0, errors: [`Failed to parse: ${err}`] };
+	}
+
+	if (!targetSpecId) {
+		return { file: fileName, targetSpecId: "?", applied: 0, errors: ["Missing target_spec_id in frontmatter"] };
+	}
+
+	// Find target spec Document in specs/ by ID
+	const allDocs = await core.filesystem.listDocuments();
+	const specDoc = allDocs.find((d) => d.id.toLowerCase() === targetSpecId.toLowerCase() && d.type === "specification");
+	if (!specDoc) {
+		return { file: fileName, targetSpecId, applied: 0, errors: [`Target spec "${targetSpecId}" not found in specs/`] };
+	}
+
+	const specName = specDoc.title;
+	const mainContent = specDoc.rawContent;
+	let working = mainContent;
+	let hasChanges = false;
+
+	// Parse delta sections
+	const deltaPlan = parseDeltaSpec(deltaDoc.rawContent);
+
+	// 1. ADDED
+	for (const block of deltaPlan.added) {
+		const result = applyAdded(working, block.raw);
+		if (result.applied) {
+			working = result.content;
+			hasChanges = true;
+			applied++;
+		}
+	}
+
+	// 2. MODIFIED
+	for (const block of deltaPlan.modified) {
+		const result = applyModified(working, block.name, block.raw);
+		if (result.applied) {
+			working = result.content;
+			hasChanges = true;
+			applied++;
+		} else if (result.notFound) {
+			errors.push(`Requirement "${block.name}" not found in spec "${specName}"`);
+		}
+	}
+
+	// 3. REMOVED
+	for (const name of deltaPlan.removed) {
+		const result = applyRemoved(working, name);
+		if (result.applied) {
+			working = result.content;
+			hasChanges = true;
+			applied++;
+		} else if (result.notFound) {
+			errors.push(`Requirement "${name}" not found in spec "${specName}"`);
+		}
+	}
+
+	// 4. RENAMED
+	for (const rename of deltaPlan.renamed) {
+		const result = applyRenamed(working, rename.from, rename.to);
+		if (result.applied) {
+			working = result.content;
+			hasChanges = true;
+			applied++;
+		}
+	}
+
+	// Validate
+	const validationErrors = validateSpecContent(working, specName);
+	for (const err of validationErrors) {
+		errors.push(`Validation error: ${err}`);
+	}
+
+	// Write
+	if (!isDryRun && hasChanges) {
+		// Backup original spec
+		if (mainContent) {
+			const backupDir = join(changePath, "backups");
+			await mkdir(backupDir, { recursive: true });
+			await writeFile(join(backupDir, `${specDoc.title}.md.bak`), mainContent, "utf-8");
+		}
+
+		// Update spec Document via Core API
+		await core.updateDocumentFromInput({
+			id: specDoc.id,
+			content: working,
+		});
+
+		// Set syncStatus on published spec
+		const specFilePath = join(specsDir, specDoc.path ?? `${specDoc.id}.md`);
+		if (existsSync(specFilePath)) {
+			await updateSyncStatus(specFilePath, "synced");
+		}
+
+		// Set syncStatus on change artifact
+		await updateSyncStatus(deltaFilePath, "synced");
+	}
+
+	return { file: fileName, targetSpecId, applied, errors };
+}
+
+// ─── new-spec processing ───
+
+async function processNewSpec(
+	newSpecFilePath: string,
+	core: Core,
+	_changePath: string,
+	specsDir: string,
+	isDryRun: boolean,
+): Promise<{ file: string; specDocId: string; errors: string[] }> {
+	const fileName = basename(newSpecFilePath);
+	const errors: string[] = [];
+
+	// Parse the new-spec Document
+	let newSpecDoc: Document;
+	try {
+		newSpecDoc = readDocumentFromFile(newSpecFilePath);
+	} catch (err) {
+		return { file: fileName, specDocId: "", errors: [`Failed to parse: ${err}`] };
+	}
+
+	// Strip frontmatter and ## Motivation section from body
+	let body = newSpecDoc.rawContent;
+	body = body.replace(/^## Motivation\s*\n[\s\S]*?(?=\n## |$)/m, "").trim();
+
+	const specName = newSpecDoc.title;
+
+	// Validate body has Purpose and Requirements
+	if (!body.includes("## Purpose")) {
+		errors.push("new-spec body must contain a ## Purpose section");
+	}
+	if (!body.includes("## Requirements")) {
+		errors.push("new-spec body must contain a ## Requirements section");
+	}
+
+	if (errors.length > 0) {
+		return { file: fileName, specDocId: "", errors };
+	}
+
+	// Validate against SpecSchema
+	const validationErrors = validateSpecContent(body, specName);
+	for (const err of validationErrors) {
+		errors.push(`Validation error: ${err}`);
+	}
+
+	// Create spec Document
+	if (!isDryRun) {
+		const createdDoc = await core.createDocumentFromInput({
+			title: specName,
+			type: "specification",
+			status: "draft",
+			content: body,
+		});
+
+		// Set syncStatus on the new spec
+		const specFileName = `SPC-${createdDoc.id.replace(/^SPC-/i, "")} - ${sanitizeFilename(specName)}.md`;
+		const specFilePath = join(specsDir, specFileName);
+		if (existsSync(specFilePath)) {
+			await updateSyncStatus(specFilePath, "synced");
+		}
+
+		// Set syncStatus on change artifact
+		await updateSyncStatus(newSpecFilePath, "synced");
+
+		return { file: fileName, specDocId: createdDoc.id, errors };
+	}
+
+	// dry run — still report the ID that would be created
+	return { file: fileName, specDocId: "(would create)", errors };
+}
+
+function sanitizeFilename(filename: string): string {
+	return filename
+		.replace(/[<>:"/\\|?*]/g, "-")
+		.replace(/['(),!@#$%^&+=[\]{};]/g, "")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
+}
+
+// ─── Main sync function ───
+
+/**
+ * Sync change artifacts from a change directory to published spec Documents.
  *
- * @param changeName - Name of the change
+ * @param changeName - Name of the change (e.g., "add-auth" or "2026-05-16-add-auth")
  * @param core - Core instance for Document read/write
  * @param options - Sync options (dryRun)
  * @returns Summary string describing what was done
@@ -208,158 +420,82 @@ export async function syncSpecs(changeName: string, core: Core, options: SyncOpt
 	const isDryRun = options.dryRun ?? false;
 	const projectRoot = core.fs.rootDir;
 	const changePath = join(projectRoot, "backlog", "changes", changeName);
+	const specsDir = join(projectRoot, "specs");
 
 	if (!existsSync(changePath)) {
 		return `Change "${changeName}" not found.`;
 	}
 
-	const specsDir = join(changePath, "specs");
+	// List artifact files in change dir
+	let entries: string[];
+	try {
+		entries = await readdir(changePath);
+	} catch {
+		return `Cannot read change dir "${changeName}".`;
+	}
+
+	const specDeltaFiles = entries.filter((e) => e.endsWith(".spec-delta.md")).map((f) => join(changePath, f));
+
+	const newSpecFiles = entries.filter((e) => e.endsWith(".new-spec.md")).map((f) => join(changePath, f));
+
+	if (specDeltaFiles.length === 0 && newSpecFiles.length === 0) {
+		return `No change artifacts found for "${changeName}".`;
+	}
+
+	// Ensure specs/ directory exists
 	if (!existsSync(specsDir)) {
-		return `No delta specs found for change "${changeName}".`;
+		await mkdir(specsDir, { recursive: true });
 	}
 
-	const specDirs = await readdir(specsDir);
-	if (specDirs.length === 0) {
-		return `No delta specs found for change "${changeName}".`;
+	const summary: SyncSummary = { deltaSpecs: [], newSpecs: [] };
+
+	// Process spec-delta files
+	for (const f of specDeltaFiles) {
+		const result = await processSpecDelta(f, core, changePath, specsDir, isDryRun);
+		summary.deltaSpecs.push(result);
 	}
 
-	const perSpecResults: Array<{ spec: string; applied: number; errors: string[] }> = [];
-	let totalDeltas = 0;
-	let totalApplied = 0;
-
-	for (const specName of specDirs) {
-		const specFilePath = join(specsDir, specName, "spec.md");
-		if (!existsSync(specFilePath)) continue;
-
-		const specContent = readFileSync(specFilePath, "utf-8");
-		const deltaPlan = parseDeltaSpec(specContent);
-
-		const addedCount =
-			deltaPlan.added.length + deltaPlan.modified.length + deltaPlan.removed.length + deltaPlan.renamed.length;
-
-		if (addedCount === 0) continue;
-
-		totalDeltas += addedCount;
-		const specErrors: string[] = [];
-		let specApplied = 0;
-
-		// Find existing spec Document by title + type "specification"
-		const allDocs = await core.filesystem.listDocuments();
-		const specDoc = allDocs.find((d) => d.title.toLowerCase() === specName.toLowerCase() && d.type === "specification");
-		const specWasNew = !specDoc;
-		const mainContent = specDoc?.rawContent ?? "";
-
-		let working = mainContent;
-		let hasChanges = false;
-
-		// 1. ADDED
-		for (const block of deltaPlan.added) {
-			const result = applyAdded(working, block.raw);
-			if (result.applied) {
-				working = result.content;
-				hasChanges = true;
-				specApplied++;
-			}
-		}
-
-		// 2. MODIFIED
-		for (const block of deltaPlan.modified) {
-			const result = applyModified(working, block.name, block.raw);
-			if (result.applied) {
-				working = result.content;
-				hasChanges = true;
-				specApplied++;
-			} else if (result.notFound) {
-				specErrors.push(`Requirement "${block.name}" not found in spec "${specName}"`);
-			}
-		}
-
-		// 3. REMOVED
-		for (const name of deltaPlan.removed) {
-			const result = applyRemoved(working, name);
-			if (result.applied) {
-				working = result.content;
-				hasChanges = true;
-				specApplied++;
-			} else if (result.notFound) {
-				specErrors.push(`Requirement "${name}" not found in spec "${specName}"`);
-			}
-		}
-
-		// 4. RENAMED
-		for (const rename of deltaPlan.renamed) {
-			const result = applyRenamed(working, rename.from, rename.to);
-			if (result.applied) {
-				working = result.content;
-				hasChanges = true;
-				specApplied++;
-			}
-		}
-
-		// Validate
-		const validationErrors = validateSpecContent(working, specName);
-		if (validationErrors.length > 0) {
-			for (const err of validationErrors) {
-				specErrors.push(`Validation error: ${err}`);
-			}
-		}
-
-		// Write
-		if (!isDryRun && hasChanges) {
-			// Backup: write to backlog/changes/<name>/backups/<spec>.md.bak
-			if (!specWasNew && mainContent) {
-				const backupDir = join(changePath, "backups");
-				await mkdir(backupDir, { recursive: true });
-				await writeFile(join(backupDir, `${specName}.md.bak`), mainContent, "utf-8");
-			}
-
-			// Update the spec Document via Core API (or create if new)
-			if (specDoc) {
-				await core.updateDocumentFromInput({
-					id: specDoc.id,
-					content: working,
-				});
-			} else {
-				// New spec: create a Document
-				await core.createDocumentFromInput({
-					title: specName,
-					type: "specification",
-					status: "draft",
-					content: working,
-				});
-			}
-		}
-
-		totalApplied += specApplied;
-		perSpecResults.push({ spec: specName, applied: specApplied, errors: specErrors });
+	// Process new-spec files
+	for (const f of newSpecFiles) {
+		const result = await processNewSpec(f, core, changePath, specsDir, isDryRun);
+		summary.newSpecs.push(result);
 	}
 
-	if (totalDeltas === 0) {
-		return `No deltas found for change "${changeName}".`;
-	}
-
-	const summaryLines: string[] = [];
+	// Build summary string
+	const lines: string[] = [];
 	if (isDryRun) {
-		summaryLines.push(`[dry run] Would sync ${totalDeltas} delta(s) from change "${changeName}":`);
+		lines.push(
+			`[dry run] Would sync ${specDeltaFiles.length} spec-delta(s) and ${newSpecFiles.length} new-spec(s) from "${changeName}":`,
+		);
 	} else {
-		summaryLines.push(`Synced ${totalApplied} delta(s) from change "${changeName}":`);
+		lines.push(
+			`Synced ${specDeltaFiles.length} spec-delta(s) and ${newSpecFiles.length} new-spec(s) from "${changeName}":`,
+		);
 	}
 
-	for (const r of perSpecResults) {
-		if (r.applied > 0) {
-			// Detect creation vs update for summary display
-			const allDocs = await core.filesystem.listDocuments();
-			const createdDoc = allDocs.find(
-				(d) => d.title.toLowerCase() === r.spec.toLowerCase() && d.type === "specification",
-			);
-			const createdLabel =
-				createdDoc?.createdDate === new Date().toISOString().slice(0, 16).replace("T", " ") ? " (created)" : "";
-			summaryLines.push(`  ${r.spec}: ${r.applied} delta(s) applied${createdLabel}`);
-		}
-		for (const err of r.errors) {
-			summaryLines.push(`  ${r.spec}: ${err}`);
+	if (summary.deltaSpecs.length > 0) {
+		lines.push("");
+		lines.push("  spec-delta artifacts:");
+		for (const r of summary.deltaSpecs) {
+			const status = r.errors.length > 0 ? ` (${r.errors.length} error(s))` : "";
+			lines.push(`    ${r.file} → ${r.targetSpecId}: ${r.applied} delta(s) applied${status}`);
+			for (const err of r.errors) {
+				lines.push(`      ERROR: ${err}`);
+			}
 		}
 	}
 
-	return summaryLines.join("\n");
+	if (summary.newSpecs.length > 0) {
+		lines.push("");
+		lines.push("  new-spec artifacts:");
+		for (const r of summary.newSpecs) {
+			const status = r.errors.length > 0 ? ` (${r.errors.length} error(s))` : "";
+			lines.push(`    ${r.file} → ${r.specDocId}${status}`);
+			for (const err of r.errors) {
+				lines.push(`      ERROR: ${err}`);
+			}
+		}
+	}
+
+	return lines.join("\n");
 }

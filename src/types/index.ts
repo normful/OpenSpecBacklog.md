@@ -179,7 +179,7 @@ export interface Milestone {
 	readonly rawContent: string; // Raw markdown content without frontmatter
 }
 
-export const DOCUMENT_TYPE_VALUES = ["readme", "guide", "specification", "other"] as const;
+export const DOCUMENT_TYPE_VALUES = ["readme", "guide", "specification", "other", "spec-delta", "new-spec"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPE_VALUES)[number];
 
 export const DOCUMENT_STATUS_VALUES = ["draft", "published", "archived"] as const;
@@ -190,6 +190,7 @@ export interface Document {
 	title: string;
 	type: DocumentType;
 	status?: DocumentStatus;
+	syncStatus?: "pending" | "synced";
 	createdDate: string;
 	updatedDate?: string;
 	rawContent: string; // Raw markdown content without frontmatter
@@ -205,6 +206,7 @@ export interface DocumentCreateInput {
 	content?: string;
 	type?: Document["type"];
 	status?: DocumentStatus;
+	syncStatus?: "pending" | "synced";
 	path?: string;
 	tags?: string[];
 }

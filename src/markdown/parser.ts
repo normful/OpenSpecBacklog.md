@@ -221,11 +221,19 @@ export function parseDocument(content: string): Document {
 			? (rawStatus as Document["status"])
 			: undefined;
 
+	const rawSyncStatus = frontmatter.sync_status ? String(frontmatter.sync_status).toLowerCase() : undefined;
+	const validSyncStatuses = ["pending", "synced"] as const;
+	const syncStatus =
+		rawSyncStatus && (validSyncStatuses as readonly string[]).includes(rawSyncStatus)
+			? (rawSyncStatus as "pending" | "synced")
+			: undefined;
+
 	return {
 		id: String(frontmatter.id || ""),
 		title: String(frontmatter.title || ""),
 		type: String(frontmatter.type || "other") as Document["type"],
 		status,
+		syncStatus,
 		createdDate: normalizeDate(frontmatter.created_date),
 		updatedDate: frontmatter.updated_date ? normalizeDate(frontmatter.updated_date) : undefined,
 		rawContent,

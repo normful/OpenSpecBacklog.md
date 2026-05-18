@@ -56,10 +56,32 @@ async function specDocExists(env: TestEnv, name: string): Promise<boolean> {
 	return doc !== null;
 }
 
-function createDeltaSpec(env: TestEnv, change: string, spec: string, content: string): void {
-	const dir = join(env.changesDir, change, "specs", spec);
+async function getSpecId(env: TestEnv, specName: string): Promise<string> {
+	const docs = await env.core.filesystem.listDocuments();
+	const spec = docs.find((d) => d.title.toLowerCase() === specName.toLowerCase() && d.type === "specification");
+	return spec?.id ?? specName;
+}
+
+async function createDeltaSpec(env: TestEnv, change: string, spec: string, content: string): Promise<void> {
+	const dir = join(env.changesDir, change);
 	mkdirSync(dir, { recursive: true });
-	writeFileSync(join(dir, "spec.md"), content, "utf-8");
+	const targetId = await getSpecId(env, spec);
+	const fm = `---
+id: DELTA-999
+title: ${spec}
+type: spec-delta
+created_date: 2026-05-19 00:00
+sync_status: pending
+target_spec_id: ${targetId}
+---
+
+`;
+	// If content already has frontmatter, don't add it; otherwise prepend
+	if (content.startsWith("---\n")) {
+		writeFileSync(join(dir, `${spec}.spec-delta.md`), content, "utf-8");
+	} else {
+		writeFileSync(join(dir, `${spec}.spec-delta.md`), fm + content, "utf-8");
+	}
 }
 
 function backupExists(env: TestEnv, change: string, spec: string): boolean {
@@ -138,7 +160,7 @@ describe("syncSpecs — ADDED deltas", () => {
 
 	it("appends a new requirement to existing spec", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
+		await createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
 
 		const result = await syncSpecs("my-change", env.core, { dryRun: false });
 		const content = await readSpecDoc(env, "auth");
@@ -152,7 +174,7 @@ describe("syncSpecs — ADDED deltas", () => {
 
 	it("appends multiple new requirements", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -168,22 +190,27 @@ describe("syncSpecs — ADDED deltas", () => {
 		expect(result).toContain("2 delta(s)");
 	});
 
-	it("creates new spec document when it does not exist", async () => {
-		createDeltaSpec(env, "my-change", "new-spec", `## ADDED Requirements\n\n${reqWithScenario("Feature")}\n`);
+	it("creates new spec document from a .new-spec.md file", async () => {
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "billing.new-spec.md"),
+			"---\nid: NEWSPEC-1\ntitle: billing\ntype: new-spec\ncreated_date: 2026-05-19 00:00\nsync_status: pending\n---\n\n## Motivation\nNeed billing.\n\n## Purpose\nHandle billing.\n\n## Requirements\n### Requirement: Feature\nThe system SHALL feature.\n\n#### Scenario: test\n\nGIVEN a state\nWHEN action\nTHEN outcome.\n",
+		);
 
 		const result = await syncSpecs("my-change", env.core, { dryRun: false });
 
-		expect(await specDocExists(env, "new-spec")).toBe(true);
-		const content = await readSpecDoc(env, "new-spec");
+		expect(await specDocExists(env, "billing")).toBe(true);
+		const content = await readSpecDoc(env, "billing");
 		expect(content).toContain("### Requirement: Feature");
 		expect(content).toContain("SHALL feature");
-		expect(result).toContain("1 delta(s) applied");
-		expect(result).toContain("new-spec");
+		expect(content).not.toContain("## Motivation");
+		expect(result).toContain("billing");
 	});
 
 	it("preserves existing requirements when appending", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", `${reqBlock("Login")}\n\n${reqBlock("Logout")}`));
-		createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
+		await createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
 
 		await syncSpecs("my-change", env.core, { dryRun: false });
 
@@ -210,7 +237,7 @@ describe("syncSpecs — MODIFIED deltas", () => {
 
 	it("replaces requirement block including scenarios", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqWithScenario("Login")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -231,7 +258,7 @@ describe("syncSpecs — MODIFIED deltas", () => {
 
 	it("replaces requirement with different body text and keeps a scenario", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login", "The system SHALL use basic auth.")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -247,7 +274,7 @@ describe("syncSpecs — MODIFIED deltas", () => {
 
 	it("replaces requirement by name case-insensitively", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login", "The system SHALL use basic auth.")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -276,7 +303,7 @@ describe("syncSpecs — REMOVED deltas", () => {
 
 	it("removes requirement block by header name", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", `${reqWithScenario("Login")}\n\n${reqWithScenario("Logout")}`));
-		createDeltaSpec(env, "my-change", "auth", "## REMOVED Requirements\n\n### Requirement: Login\n");
+		await createDeltaSpec(env, "my-change", "auth", "## REMOVED Requirements\n\n### Requirement: Login\n");
 
 		await syncSpecs("my-change", env.core, { dryRun: false });
 
@@ -287,7 +314,7 @@ describe("syncSpecs — REMOVED deltas", () => {
 
 	it("removes requirement case-insensitively", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(env, "my-change", "auth", "## REMOVED Requirements\n\n### Requirement: LOGIN\n");
+		await createDeltaSpec(env, "my-change", "auth", "## REMOVED Requirements\n\n### Requirement: LOGIN\n");
 
 		await syncSpecs("my-change", env.core, { dryRun: false });
 
@@ -309,7 +336,7 @@ describe("syncSpecs — RENAMED deltas", () => {
 
 	it("renames requirement header from old to new name", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqWithScenario("Login")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -326,7 +353,7 @@ describe("syncSpecs — RENAMED deltas", () => {
 
 	it("renames requirement case-insensitively", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login", "The system SHALL login.")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -355,7 +382,7 @@ describe("syncSpecs — backup behavior", () => {
 	it("backs up original spec before modifying", async () => {
 		const original = makeSpec("auth", reqBlock("Login", "The system SHALL login."));
 		await createSpecDoc(env, "auth", original);
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -371,7 +398,7 @@ describe("syncSpecs — backup behavior", () => {
 	});
 
 	it("does not create backup for newly created spec", async () => {
-		createDeltaSpec(env, "my-change", "new-spec", `## ADDED Requirements\n\n${reqWithScenario("Feature")}\n`);
+		await createDeltaSpec(env, "my-change", "new-spec", `## ADDED Requirements\n\n${reqWithScenario("Feature")}\n`);
 
 		await syncSpecs("my-change", env.core, { dryRun: false });
 
@@ -380,7 +407,7 @@ describe("syncSpecs — backup behavior", () => {
 
 	it("does not create backup when --dry-run is used", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -406,7 +433,7 @@ describe("syncSpecs — dry-run mode", () => {
 
 	it("reports what would happen without writing", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
+		await createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
 
 		const result = await syncSpecs("my-change", env.core, { dryRun: true });
 
@@ -419,8 +446,8 @@ describe("syncSpecs — dry-run mode", () => {
 	it("reports deltas grouped by spec", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
 		await createSpecDoc(env, "billing", makeSpec("billing", reqBlock("Invoice")));
-		createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
-		createDeltaSpec(
+		await createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"billing",
@@ -432,7 +459,7 @@ describe("syncSpecs — dry-run mode", () => {
 		expect(result).toContain("dry run");
 		expect(result).toContain("auth");
 		expect(result).toContain("billing");
-		expect(result).toContain("2 delta(s)");
+		expect(result).toContain("2 spec-delta(s)");
 	});
 });
 
@@ -449,7 +476,7 @@ describe("syncSpecs — validation", () => {
 
 	it("validates synced spec against SpecSchema", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -463,7 +490,7 @@ describe("syncSpecs — validation", () => {
 	it("reports validation errors in summary", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
 		// Add a requirement without SHALL/MUST keyword
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -489,11 +516,11 @@ describe("syncSpecs — edge cases", () => {
 
 	it("handles empty delta spec (no deltas)", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(env, "my-change", "auth", "");
+		await createDeltaSpec(env, "my-change", "auth", "");
 
 		const result = await syncSpecs("my-change", env.core, { dryRun: false });
 
-		expect(result).toContain("No deltas found");
+		expect(result).toContain("0 delta(s) applied");
 	});
 
 	it("handles multiple operation types in one sync", async () => {
@@ -503,7 +530,7 @@ describe("syncSpecs — edge cases", () => {
 			makeSpec("auth", `${reqWithScenario("Login")}\n\n${reqWithScenario("Logout")}\n\n${reqWithScenario("Profile")}`),
 		);
 
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
@@ -532,20 +559,20 @@ describe("syncSpecs — edge cases", () => {
 	it("reports per-spec summary with counts", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
 		await createSpecDoc(env, "billing", makeSpec("billing", reqBlock("Invoice")));
-		createDeltaSpec(
+		await createDeltaSpec(
 			env,
 			"my-change",
 			"auth",
 			`## ADDED Requirements\n\n${reqWithScenario("Register")}\n\n` +
 				`## MODIFIED Requirements\n\n${modifiedBlock("Login", "The system SHALL authenticate with SSO.")}\n`,
 		);
-		createDeltaSpec(env, "my-change", "billing", "## REMOVED Requirements\n\n### Requirement: Invoice\n");
+		await createDeltaSpec(env, "my-change", "billing", "## REMOVED Requirements\n\n### Requirement: Invoice\n");
 
 		const result = await syncSpecs("my-change", env.core, { dryRun: false });
 
 		expect(result).toContain("auth");
 		expect(result).toContain("billing");
-		expect(result).toContain("3 delta(s)");
+		expect(result).toContain("2 delta(s)");
 	});
 
 	it("handles missing change directory gracefully", async () => {
@@ -555,7 +582,7 @@ describe("syncSpecs — edge cases", () => {
 
 	it("handles REMOVED on nonexistent requirement gracefully", async () => {
 		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
-		createDeltaSpec(env, "my-change", "auth", "## REMOVED Requirements\n\n### Requirement: NonExistent\n");
+		await createDeltaSpec(env, "my-change", "auth", "## REMOVED Requirements\n\n### Requirement: NonExistent\n");
 
 		const result = await syncSpecs("my-change", env.core, { dryRun: false });
 		expect(result).toContain("NonExistent");

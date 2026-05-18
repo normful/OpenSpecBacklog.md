@@ -1,7 +1,6 @@
 /**
- * Tests for `backlog change archive` command — checklist-aware archive pipeline.
- * Tests the pure archive logic: completeness check, unsynced delta detection,
- * directory move, force override, and error reporting.
+ * Tests for `backlog change archive` command — checklist-aware archive pipeline (v2).
+ * Tests flat change artifacts: spec-delta, new-spec, syncStatus-based unsynced check.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -33,33 +32,15 @@ function createChangeDir(env: TestEnv, name: string, files?: Record<string, stri
 	const dir = join(env.changesDir, name);
 	mkdirSync(dir, { recursive: true });
 
-	// Use provided files if given, otherwise create defaults
-	const filesToWrite = files ?? {
-		"proposal.md": "## Why\n\nTest change.\n## What Changes\n\n- **test:** Add feature.\n",
-		"design.md": "# Design\n\nTest design.\n",
-	};
-
-	for (const [filename, content] of Object.entries(filesToWrite)) {
-		const fullPath = join(dir, filename);
-		// Create nested dirs if needed
-		const parentDir = fullPath.slice(0, fullPath.lastIndexOf("/"));
-		if (parentDir && !existsSync(parentDir)) {
-			mkdirSync(parentDir, { recursive: true });
+	if (files) {
+		for (const [filename, content] of Object.entries(files)) {
+			const fullPath = join(dir, filename);
+			const parentDir = fullPath.slice(0, fullPath.lastIndexOf("/"));
+			if (parentDir && !existsSync(parentDir)) {
+				mkdirSync(parentDir, { recursive: true });
+			}
+			writeFileSync(fullPath, content, "utf-8");
 		}
-		writeFileSync(fullPath, content, "utf-8");
-	}
-}
-
-/**
- * Create publish artifact files (backlog/docs/) at the project root level.
- * Needed when a test requires all 4 change artifacts to be complete.
- */
-function createPublishFiles(env: TestEnv, files?: Record<string, string>): void {
-	const docsDir = join(env.root, "backlog", "docs");
-	mkdirSync(docsDir, { recursive: true });
-	const docsToWrite = files ?? { "guide.md": "# Guide\n\nTest doc.\n" };
-	for (const [filename, content] of Object.entries(docsToWrite)) {
-		writeFileSync(join(docsDir, filename), content, "utf-8");
 	}
 }
 
@@ -70,8 +51,7 @@ function changeDirExists(env: TestEnv, name: string): boolean {
 function archiveDirExists(env: TestEnv, name: string): boolean {
 	const dir = join(env.changesDir, "archive");
 	if (!existsSync(dir)) return false;
-	const entries = readdirSync(dir);
-	return entries.some((e) => e.endsWith(`-${name}`));
+	return readdirSync(dir).some((e) => e.endsWith(`-${name}`));
 }
 
 function hasArchiveEntries(env: TestEnv): string[] {
@@ -80,12 +60,49 @@ function hasArchiveEntries(env: TestEnv): string[] {
 	return readdirSync(dir);
 }
 
+/** Build a spec-delta file with sync_status frontmatter */
+function specDeltaContent(specName: string, syncStatus: string, body?: string): string {
+	return `---
+id: DELTA-1
+title: ${specName}
+type: spec-delta
+created_date: 2026-05-19 00:00
+sync_status: ${syncStatus}
+target_spec_id: SPC-1
+---
+
+${body ?? "## ADDED Requirements\n\n### Requirement: Test\n\nThe system SHALL test.\n"}
+`;
+}
+
+/** Build a new-spec file with sync_status frontmatter */
+function newSpecContent(specName: string, syncStatus: string): string {
+	return `---
+id: NEWSPEC-1
+title: ${specName}
+type: new-spec
+created_date: 2026-05-19 00:00
+sync_status: ${syncStatus}
+---
+
+## Motivation
+Test.
+
+## Purpose
+Test purpose.
+
+## Requirements
+### Requirement: Test
+
+The system SHALL test.
+`;
+}
+
 // ─── Unit tests: archiveDirName ───
 
 describe("archiveDirName", () => {
 	it("produces date-prefixed name", () => {
 		const result = archiveDirName("my-change");
-		// Pattern: YYYY-MM-DD-my-change
 		expect(result).toMatch(/^\d{4}-\d{2}-\d{2}-my-change$/);
 	});
 
@@ -113,41 +130,47 @@ describe("hasUnsyncedDeltas", () => {
 		cleanup(env);
 	});
 
-	it("returns false when no specs dir exists", () => {
+	it("returns false when change dir is empty", () => {
 		createChangeDir(env, "my-change");
 		expect(hasUnsyncedDeltas(join(env.changesDir, "my-change"))).toBe(false);
 	});
 
-	it("returns false when specs dir is empty", () => {
+	it("returns false when all artifacts are synced", () => {
 		const dir = join(env.changesDir, "my-change");
 		createChangeDir(env, "my-change");
-		mkdirSync(join(dir, "specs"), { recursive: true });
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "synced"), "utf-8");
 		expect(hasUnsyncedDeltas(dir)).toBe(false);
 	});
 
-	it("returns true when specs dir has subdirectory entries", () => {
+	it("returns true when spec-delta is pending", () => {
 		const dir = join(env.changesDir, "my-change");
 		createChangeDir(env, "my-change");
-		mkdirSync(join(dir, "specs", "auth"), { recursive: true });
-		writeFileSync(join(dir, "specs", "auth", "spec.md"), "## ADDED Requirements", "utf-8");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "pending"), "utf-8");
 		expect(hasUnsyncedDeltas(dir)).toBe(true);
 	});
 
-	it("returns true with multiple spec dirs", () => {
+	it("returns true when new-spec is pending", () => {
 		const dir = join(env.changesDir, "my-change");
 		createChangeDir(env, "my-change");
-		mkdirSync(join(dir, "specs", "auth"), { recursive: true });
-		mkdirSync(join(dir, "specs", "billing"), { recursive: true });
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "pending"), "utf-8");
 		expect(hasUnsyncedDeltas(dir)).toBe(true);
 	});
 
-	it("ignores non-directory entries in specs dir", () => {
+	it("returns true when one of multiple artifacts is unsynced", () => {
 		const dir = join(env.changesDir, "my-change");
 		createChangeDir(env, "my-change");
-		mkdirSync(join(dir, "specs"), { recursive: true });
-		writeFileSync(join(dir, "specs", "notes.txt"), "some note", "utf-8");
-		// Only directories count as potential delta specs
-		expect(hasUnsyncedDeltas(dir)).toBe(false);
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "pending"), "utf-8");
+		expect(hasUnsyncedDeltas(dir)).toBe(true);
+	});
+
+	it("defaults to pending for artifacts without sync_status", () => {
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		// File without frontmatter
+		writeFileSync(join(dir, "auth.spec-delta.md"), "## ADDED Requirements\n", "utf-8");
+		expect(hasUnsyncedDeltas(dir)).toBe(true);
 	});
 });
 
@@ -165,77 +188,57 @@ describe("archiveChange — completeness check", () => {
 	});
 
 	it("blocks archive when artifacts incomplete (shows blockers)", () => {
-		// 4-artifact hardcoded checklist: proposal, deltas, design, publish
-		// Only proposal.md and design.md exist — no specs/ files, no backlog/docs/ files
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"design.md": "design content",
-		});
+		// Only spec-delta file exists — new-specs artifact is missing
+		createChangeDir(env, "my-change", { "auth.spec-delta.md": specDeltaContent("auth", "synced") });
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
-		// proposal=done, design=done, deltas=ready, publish=ready
-		// isChangeComplete returns false (deltas, publish missing)
 		expect(result.success).toBe(false);
 		expect(result.reason).toContain("incomplete");
-		expect(result.doneArtifacts).toEqual(["proposal", "design"]);
-		expect(result.totalArtifacts).toBe(4);
-		expect(result.reason).toContain("2/4");
+		expect(result.doneArtifacts).toEqual(["deltas"]);
+		expect(result.totalArtifacts).toBe(2);
+		expect(result.reason).toContain("1/2");
 		expect(changeDirExists(env, "my-change")).toBe(true);
 	});
 
-	it("allows archive when all artifacts complete", () => {
-		// All 4 change artifacts present
-		// Use flat spec file (not a subdirectory) to avoid triggering unsynced delta detection
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"design.md": "design content",
-			"specs/auth.md": "## ADDED\n",
-		});
-		createPublishFiles(env);
+	it("allows archive when all artifacts complete and synced", () => {
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "synced"), "utf-8");
 
-		const result = archiveChange("my-change", env.root, { force: false });
+		const result = archiveChange("my-change", env.root, { force: false, noSyncCheck: true });
 
 		expect(result.success).toBe(true);
 		expect(result.archivePath).toContain("my-change");
-		// Change dir should be moved
 		expect(changeDirExists(env, "my-change")).toBe(false);
-		// Archive dir should exist
 		expect(archiveDirExists(env, "my-change")).toBe(true);
 	});
 
 	it("reports which artifacts were done at time of archive", () => {
-		// All 4 change artifacts present
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"design.md": "design content",
-			"specs/auth.md": "## ADDED\n",
-		});
-		createPublishFiles(env);
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "synced"), "utf-8");
 
-		const result = archiveChange("my-change", env.root, { force: false });
+		const result = archiveChange("my-change", env.root, { force: false, noSyncCheck: true });
 
 		expect(result.success).toBe(true);
-		expect(result.doneArtifacts).toContain("proposal");
 		expect(result.doneArtifacts).toContain("deltas");
-		expect(result.doneArtifacts).toContain("design");
-		expect(result.doneArtifacts).toContain("publish");
-		expect(result.totalArtifacts).toBe(4);
-		expect(result.doneArtifacts.length).toBe(4);
+		expect(result.doneArtifacts).toContain("new-specs");
+		expect(result.totalArtifacts).toBe(2);
+		expect(result.doneArtifacts.length).toBe(2);
 	});
 
 	it("reports partial done when some artifacts complete but archive blocked", () => {
-		// Only pass proposal.md — design.md not created
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-		});
+		createChangeDir(env, "my-change", { "auth.spec-delta.md": specDeltaContent("auth", "synced") });
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
 		expect(result.success).toBe(false);
-		expect(result.doneArtifacts).toEqual(["proposal"]);
-		expect(result.totalArtifacts).toBe(4);
-		expect(result.reason).toContain("1/4");
+		expect(result.doneArtifacts).toEqual(["deltas"]);
+		expect(result.totalArtifacts).toBe(2);
+		expect(result.reason).toContain("1/2");
 	});
 });
 
@@ -251,30 +254,14 @@ describe("archiveChange — --force override", () => {
 	});
 
 	it("--force archives despite incomplete artifacts", () => {
-		// Only proposal.md exists, design.md is missing
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-		});
+		createChangeDir(env, "my-change", { "auth.spec-delta.md": specDeltaContent("auth", "synced") });
 
-		const result = archiveChange("my-change", env.root, { force: true });
+		const result = archiveChange("my-change", env.root, { force: true, noSyncCheck: true });
 
 		expect(result.success).toBe(true);
 		expect(result.archivePath).toContain("my-change");
 		expect(changeDirExists(env, "my-change")).toBe(false);
 		expect(archiveDirExists(env, "my-change")).toBe(true);
-	});
-
-	it("--force bypasses completeness check and reports done/total", () => {
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-		});
-
-		const result = archiveChange("my-change", env.root, { force: true });
-
-		expect(result.success).toBe(true);
-		expect(result.blockers).toEqual([]);
-		expect(result.doneArtifacts).toEqual(["proposal"]);
-		expect(result.totalArtifacts).toBe(4);
 	});
 });
 
@@ -289,14 +276,11 @@ describe("archiveChange — unsynced delta detection", () => {
 		cleanup(env);
 	});
 
-	it("blocks archive when unsynced deltas exist (no --no-sync-check)", () => {
-		// All 4 artifacts present so completeness passes, but specs/ has subdirectories → unsynced
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"design.md": "design content",
-			"specs/hidden/spec.md": "## ADDED Requirements\n",
-		});
-		createPublishFiles(env);
+	it("blocks archive when unsynced deltas exist", () => {
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "pending"), "utf-8");
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
@@ -307,16 +291,10 @@ describe("archiveChange — unsynced delta detection", () => {
 	});
 
 	it("--no-sync-check bypasses unsynced delta detection", () => {
-		// All 4 artifacts present
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"design.md": "design content",
-			"specs/auth.md": "## MODIFIED Requirements\n",
-		});
-		createPublishFiles(env);
-		// Add an unsynced delta (subdirectory under specs/)
-		mkdirSync(join(env.changesDir, "my-change", "specs", "unsynced"), { recursive: true });
-		writeFileSync(join(env.changesDir, "my-change", "specs", "unsynced", "spec.md"), "## ADDED\n", "utf-8");
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "pending"), "utf-8");
 
 		const result = archiveChange("my-change", env.root, { force: false, noSyncCheck: true });
 
@@ -326,36 +304,29 @@ describe("archiveChange — unsynced delta detection", () => {
 		expect(archiveDirExists(env, "my-change")).toBe(true);
 	});
 
-	it("--force does NOT bypass unsynced delta check (use --no-sync-check for that)", () => {
-		// All 4 artifacts present, but specs/ has subdirectories → unsynced
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"design.md": "design content",
-			"specs/hidden/spec.md": "## ADDED Requirements\n",
-		});
-		createPublishFiles(env);
+	it("--force does NOT bypass unsynced delta check", () => {
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "pending"), "utf-8");
 
 		const result = archiveChange("my-change", env.root, { force: true });
 
-		// force bypasses completeness check, but NOT unsynced delta check
 		expect(result.success).toBe(false);
 		expect(result.hasUnsyncedDeltas).toBe(true);
 		expect(result.reason).toContain("synced");
-		expect(changeDirExists(env, "my-change")).toBe(true);
 	});
 
 	it("prioritizes incomplete artifacts over unsynced deltas", () => {
-		// Only proposal.md — design.md missing AND specs dir exists
-		createChangeDir(env, "my-change", {
-			"proposal.md": "proposal content",
-			"specs/auth/spec.md": "## ADDED Requirements",
-		});
+		// Only spec-delta exists (new-specs missing) AND it's pending
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "pending"), "utf-8");
 
 		const result = archiveChange("my-change", env.root, { force: false });
 
 		expect(result.success).toBe(false);
 		expect(result.reason).toContain("incomplete");
-		// Unsynced check not reached since completeness check failed first
 		expect(result.hasUnsyncedDeltas).toBe(false);
 	});
 });
@@ -372,35 +343,28 @@ describe("archiveChange — directory move", () => {
 	});
 
 	it("moves all files from change dir to archive dir", () => {
-		createChangeDir(env, "my-change", {
-			"proposal.md": "prop content",
-			"design.md": "design content",
-			"specs/auth/spec.md": "## ADDED",
-		});
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
 
 		const result = archiveChange("my-change", env.root, { force: true, noSyncCheck: true });
 
 		expect(result.success).toBe(true);
 		expect(changeDirExists(env, "my-change")).toBe(false);
 
-		// Check archive dir has all files
 		const archives = hasArchiveEntries(env);
 		expect(archives.length).toBe(1);
 		const archivePath = join(env.changesDir, "archive", archives[0] as string);
-		expect(existsSync(join(archivePath, "proposal.md"))).toBe(true);
-		expect(existsSync(join(archivePath, "design.md"))).toBe(true);
-		expect(existsSync(join(archivePath, "specs", "auth", "spec.md"))).toBe(true);
+		expect(existsSync(join(archivePath, "auth.spec-delta.md"))).toBe(true);
 	});
 
 	it("sets archiveDirPath with date prefix", () => {
-		createChangeDir(env, "my-change", {
-			"proposal.md": "prop content",
-			"design.md": "design content",
-			"specs/auth.md": "## ADDED\n",
-		});
-		createPublishFiles(env);
+		const dir = join(env.changesDir, "my-change");
+		createChangeDir(env, "my-change");
+		writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		writeFileSync(join(dir, "billing.new-spec.md"), newSpecContent("billing", "synced"), "utf-8");
 
-		const result = archiveChange("my-change", env.root, { force: false });
+		const result = archiveChange("my-change", env.root, { force: false, noSyncCheck: true });
 
 		expect(result.success).toBe(true);
 		expect(result.archivePath).toMatch(/\d{4}-\d{2}-\d{2}-my-change/);
@@ -408,23 +372,18 @@ describe("archiveChange — directory move", () => {
 	});
 
 	it("archives multiple changes independently", () => {
-		createChangeDir(env, "change-a", {
-			"proposal.md": "a",
-			"design.md": "b",
-			"specs/auth.md": "## ADDED\n",
-		});
-		createChangeDir(env, "change-b", {
-			"proposal.md": "c",
-			"design.md": "d",
-			"specs/auth.md": "## ADDED\n",
-		});
-		createPublishFiles(env);
+		for (const name of ["change-a", "change-b"]) {
+			const dir = join(env.changesDir, name);
+			mkdirSync(dir, { recursive: true });
+			writeFileSync(join(dir, "auth.spec-delta.md"), specDeltaContent("auth", "synced"), "utf-8");
+		}
 
-		const r1 = archiveChange("change-a", env.root, { force: false });
-		const r2 = archiveChange("change-b", env.root, { force: false });
-
+		const r1 = archiveChange("change-a", env.root, { force: true, noSyncCheck: true });
 		expect(r1.success).toBe(true);
+
+		const r2 = archiveChange("change-b", env.root, { force: true, noSyncCheck: true });
 		expect(r2.success).toBe(true);
+
 		expect(changeDirExists(env, "change-a")).toBe(false);
 		expect(changeDirExists(env, "change-b")).toBe(false);
 

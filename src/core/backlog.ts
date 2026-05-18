@@ -2355,7 +2355,10 @@ export class Core {
 	}
 
 	async createDocument(doc: Document, autoCommit?: boolean, subPath = ""): Promise<void> {
-		const relativePath = await this.fs.saveDocument(doc, normalizeDocumentSubPath(subPath));
+		const isChangeArtifact = doc.type === "spec-delta" || doc.type === "new-spec";
+		const relativePath = isChangeArtifact
+			? await this.fs.saveDocument(doc, "", join(this.fs.rootDir, normalizeDocumentSubPath(subPath)))
+			: await this.fs.saveDocument(doc, normalizeDocumentSubPath(subPath));
 		doc.path = relativePath;
 
 		if (await this.shouldAutoCommit(autoCommit)) {
@@ -2393,6 +2396,8 @@ export class Core {
 		const tags = normalizeStringList(input.tags);
 		const type = normalizeDocumentTypeInput(input.type) ?? "other";
 		const status = input.status;
+		const syncStatus = input.syncStatus;
+
 		const document = await this.withCreateLock(async () => {
 			const id = normalizeDocumentId(await generateNextDocId(this));
 			const document: Document = {
@@ -2400,12 +2405,20 @@ export class Core {
 				title,
 				type,
 				status,
+				syncStatus,
 				createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
 				rawContent: input.content ?? "",
 				...(tags && tags.length > 0 && { tags }),
 			};
 
-			await this.createDocument(document, autoCommit, subPath);
+			if (type === "spec-delta" || type === "new-spec") {
+				// Change artifacts: path is the directory override (e.g., "backlog/changes/2026-05-16-add-auth")
+				// subPath is the change directory path relative to project root
+				await this.createDocument(document, autoCommit, subPath);
+			} else {
+				// Regular docs and specs: use normal subPath routing
+				await this.createDocument(document, autoCommit, subPath);
+			}
 			return document;
 		});
 
