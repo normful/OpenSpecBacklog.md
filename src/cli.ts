@@ -3171,7 +3171,8 @@ docCmd
 		if (usePlainOutput) {
 			for (const d of docs) {
 				const statusText = d.status ? ` (${d.status})` : "";
-				console.log(`${d.id} - ${d.title}${statusText}`);
+				const syncText = d.syncStatus ? ` [${d.syncStatus}]` : "";
+				console.log(`${d.id} - ${d.title}${statusText}${syncText}`);
 			}
 			return;
 		}
@@ -3179,15 +3180,30 @@ docCmd
 		// Interactive UI
 		const selected = await genericSelectList("Select a document", docs);
 		if (selected) {
-			// Show document details (recursive search)
-			const files = await Array.fromAsync(
+			// Show document details (search both backlog/docs/ and specs/)
+			let docFile: string | undefined;
+
+			// Search backlog/docs/
+			const docFiles = await Array.fromAsync(
 				new Bun.Glob("**/*.md").scan({ cwd: core.filesystem.docsDir, followSymlinks: true }),
 			);
-			const docFile = files.find(
+			docFile = docFiles.find(
 				(f) => f.startsWith(`${selected.id} -`) || f.endsWith(`/${selected.id}.md`) || f === `${selected.id}.md`,
 			);
-			if (docFile) {
-				const filePath = join(core.filesystem.docsDir, docFile);
+			let filePath = docFile ? join(core.filesystem.docsDir, docFile) : undefined;
+
+			// Search specs/ if not found in docs/
+			if (!filePath) {
+				const specFiles = await Array.fromAsync(
+					new Bun.Glob("*.md").scan({ cwd: core.filesystem.specsDir, followSymlinks: true }),
+				);
+				docFile = specFiles.find((f) => f.startsWith(`${selected.id} -`));
+				if (docFile) {
+					filePath = join(core.filesystem.specsDir, docFile);
+				}
+			}
+
+			if (filePath) {
 				const content = await Bun.file(filePath).text();
 				await scrollableViewer(content);
 			}

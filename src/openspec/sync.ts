@@ -11,9 +11,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import matter from "gray-matter";
 import type { Core } from "../core/backlog.ts";
 import { parseDocument, parseMarkdown } from "../markdown/parser.ts";
-import { serializeDocument } from "../markdown/serializer.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
 import { SpecSchema } from "../openspec/schemas/index.ts";
 import type { Document } from "../types/index.ts";
@@ -186,15 +186,17 @@ export function applyRenamed(
 // ─── Frontmatter update helper ───
 
 /**
- * Read a markdown file, parse it as a Document, update syncStatus in frontmatter,
- * serialize, and write back. Mutates the file on disk.
+ * Update sync_status in frontmatter of a markdown file, preserving all other
+ * frontmatter fields (including custom ones like target_spec_id that are not
+ * part of the Document interface).
  */
 async function updateSyncStatus(filePath: string, newStatus: "pending" | "synced"): Promise<void> {
 	const content = readFileSync(filePath, "utf-8");
-	const doc = parseDocument(content);
-	doc.syncStatus = newStatus;
-	const updated = serializeDocument(doc);
-	await writeFile(filePath, updated, "utf-8");
+	// Parse with gray-matter to preserve all frontmatter fields (including custom ones
+	// like target_spec_id that are not part of the Document interface)
+	const parsed = matter(content);
+	const result = matter.stringify(parsed.content, { ...parsed.data, sync_status: newStatus });
+	await writeFile(filePath, result, "utf-8");
 }
 
 /**
