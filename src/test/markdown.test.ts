@@ -641,6 +641,83 @@ describe("Markdown Serializer", () => {
 			expect(result).toContain("id: doc-3");
 			expect(result).toContain("Draft body.");
 		});
+
+		it("should parse sync_status from frontmatter", () => {
+			const content = `---\nid: doc-4\ntitle: "Synced Spec"\ntype: specification\nsync_status: synced\ncreated_date: 2025-06-10\n---\n\nBody.`;
+			const doc = parseDocument(content);
+			expect(doc.syncStatus).toBe("synced");
+		});
+
+		it("should parse sync_status: pending from frontmatter", () => {
+			const content = `---\nid: doc-5\ntitle: "Pending Delta"\ntype: spec-delta\nsync_status: pending\ncreated_date: 2025-06-10\n---\n\nDelta body.`;
+			const doc = parseDocument(content);
+			expect(doc.syncStatus).toBe("pending");
+		});
+
+		it("should be undefined when sync_status is missing", () => {
+			const content = `---\nid: doc-6\ntitle: "No Sync"\ntype: other\ncreated_date: 2025-06-10\n---\n\nBody.`;
+			const doc = parseDocument(content);
+			expect(doc.syncStatus).toBeUndefined();
+		});
+
+		it("should serialize syncStatus to frontmatter", () => {
+			const document: Document = {
+				id: "DELTA-1",
+				title: "auth",
+				type: "spec-delta",
+				syncStatus: "synced",
+				createdDate: "2025-06-10",
+				rawContent: "## ADDED Requirements\n...",
+			};
+			const result = serializeDocument(document);
+			expect(result).toContain("sync_status: synced");
+			expect(result).toContain("type: spec-delta");
+		});
+
+		it("should not include sync_status when undefined", () => {
+			const document: Document = {
+				id: "doc-7",
+				title: "Regular Doc",
+				type: "guide",
+				createdDate: "2025-06-10",
+				rawContent: "Body.",
+			};
+			const result = serializeDocument(document);
+			expect(result).not.toContain("sync_status");
+		});
+
+		it("should round-trip spec-delta document with syncStatus", () => {
+			const original: Document = {
+				id: "DELTA-1",
+				title: "auth",
+				type: "spec-delta",
+				syncStatus: "pending",
+				createdDate: "2025-06-10",
+				rawContent: "## ADDED Requirements\n### Requirement: X\nThe system SHALL X.\n",
+			};
+			const serialized = serializeDocument(original);
+			const parsed = parseDocument(serialized);
+			expect(parsed.id).toBe("DELTA-1");
+			expect(parsed.title).toBe("auth");
+			expect(parsed.type).toBe("spec-delta");
+			expect(parsed.syncStatus).toBe("pending");
+			expect(parsed.rawContent).toContain("### Requirement: X");
+		});
+
+		it("should round-trip new-spec document with syncStatus", () => {
+			const original: Document = {
+				id: "NEWSPEC-1",
+				title: "billing",
+				type: "new-spec",
+				syncStatus: "synced",
+				createdDate: "2025-06-10",
+				rawContent: "## Purpose\nTest.\n\n## Requirements\n### Requirement: X\n...\n",
+			};
+			const serialized = serializeDocument(original);
+			const parsed = parseDocument(serialized);
+			expect(parsed.type).toBe("new-spec");
+			expect(parsed.syncStatus).toBe("synced");
+		});
 	});
 
 	describe("updateTaskAcceptanceCriteria", () => {

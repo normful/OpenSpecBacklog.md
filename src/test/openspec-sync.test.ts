@@ -591,3 +591,116 @@ describe("syncSpecs — edge cases", () => {
 		expect(content).toContain("### Requirement: Login");
 	});
 });
+
+describe("syncSpecs — error cases", () => {
+	let env: TestEnv;
+
+	beforeEach(() => {
+		env = createTestEnv("errors");
+	});
+
+	afterEach(() => {
+		cleanup(env);
+	});
+
+	it("reports error when spec-delta is missing target_spec_id", async () => {
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "auth.spec-delta.md"),
+			"---\nid: DELTA-1\ntitle: auth\ntype: spec-delta\nsync_status: pending\n---\n\n## ADDED Requirements\n### Requirement: Test\nThe system SHALL test.\n\n#### Scenario: t\n\nGIVEN x\nWHEN y\nTHEN z.\n",
+		);
+
+		const result = await syncSpecs("my-change", env.core, { dryRun: false });
+
+		expect(result).toContain("Missing target_spec_id");
+	});
+
+	it("reports error when target_spec_id does not match any spec", async () => {
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "auth.spec-delta.md"),
+			"---\nid: DELTA-1\ntitle: auth\ntype: spec-delta\nsync_status: pending\ntarget_spec_id: SPC-999\n---\n\n## ADDED Requirements\n### Requirement: Test\nThe system SHALL test.\n\n#### Scenario: t\n\nGIVEN x\nWHEN y\nTHEN z.\n",
+		);
+
+		const result = await syncSpecs("my-change", env.core, { dryRun: false });
+
+		expect(result).toContain("SPC-999");
+		expect(result).toContain("not found");
+	});
+
+	it("reports error when new-spec body has no ## Purpose section", async () => {
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "broken.new-spec.md"),
+			"---\nid: NEWSPEC-1\ntitle: broken\ntype: new-spec\nsync_status: pending\n---\n\n## Motivation\nNope.\n\n## Requirements\n### Requirement: X\nThe system SHALL X.\n\n#### Scenario: t\n\nGIVEN x\nWHEN y\nTHEN z.\n",
+		);
+
+		const result = await syncSpecs("my-change", env.core, { dryRun: false });
+
+		expect(result).toContain("must contain a ## Purpose section");
+	});
+
+	it("reports error when new-spec body has no ## Requirements section", async () => {
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "broken.new-spec.md"),
+			"---\nid: NEWSPEC-1\ntitle: broken\ntype: new-spec\nsync_status: pending\n---\n\n## Motivation\nNope.\n\n## Purpose\nTest.\n",
+		);
+
+		const result = await syncSpecs("my-change", env.core, { dryRun: false });
+
+		expect(result).toContain("must contain a ## Requirements section");
+	});
+
+	it("preserves target_spec_id in spec-delta frontmatter after sync", async () => {
+		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		const specId = await getSpecId(env, "auth");
+		writeFileSync(
+			join(dir, "auth.spec-delta.md"),
+			`---\nid: DELTA-1\ntitle: auth\ntype: spec-delta\nsync_status: pending\ntarget_spec_id: ${specId}\n---\n\n## ADDED Requirements\n### Requirement: New\nThe system SHALL do new.\n\n#### Scenario: t\n\nGIVEN x\nWHEN y\nTHEN z.\n`,
+		);
+
+		await syncSpecs("my-change", env.core, { dryRun: false });
+
+		const artifactContent = readFileSync(join(dir, "auth.spec-delta.md"), "utf-8");
+		expect(artifactContent).toContain(`target_spec_id: ${specId}`);
+		expect(artifactContent).toContain("sync_status: synced");
+	});
+
+	it("sets syncStatus on published spec after sync", async () => {
+		await createSpecDoc(env, "auth", makeSpec("auth", reqBlock("Login")));
+		await createDeltaSpec(env, "my-change", "auth", `## ADDED Requirements\n\n${reqWithScenario("Register")}\n`);
+
+		await syncSpecs("my-change", env.core, { dryRun: false });
+
+		const docs = await env.core.filesystem.listDocuments();
+		const spec = docs.find((d) => d.title.toLowerCase() === "auth");
+		expect(spec?.syncStatus).toBe("synced");
+	});
+
+	it("sets syncStatus on both artifacts after new-spec sync", async () => {
+		const dir = join(env.changesDir, "my-change");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "billing.new-spec.md"),
+			"---\nid: NEWSPEC-1\ntitle: billing\ntype: new-spec\ncreated_date: 2026-05-19 00:00\nsync_status: pending\n---\n\n## Motivation\nNeed billing.\n\n## Purpose\nHandle billing.\n\n## Requirements\n### Requirement: X\nThe system SHALL X.\n\n#### Scenario: t\n\nGIVEN x\nWHEN y\nTHEN z.\n",
+		);
+
+		await syncSpecs("my-change", env.core, { dryRun: false });
+
+		// Check spec has syncStatus
+		const docs = await env.core.filesystem.listDocuments();
+		const spec = docs.find((d) => d.title.toLowerCase() === "billing");
+		expect(spec?.syncStatus).toBe("synced");
+
+		// Check artifact has syncStatus
+		const artifactContent = readFileSync(join(dir, "billing.new-spec.md"), "utf-8");
+		expect(artifactContent).toContain("sync_status: synced");
+	});
+});
