@@ -11,7 +11,7 @@ import { Core } from "../core/backlog.ts";
 import { archiveChange } from "../openspec/archive.ts";
 import { CHANGE_ARTIFACTS, computeArtifactStatus, detectCompleted } from "../openspec/change-checklist.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
-import { RequirementSchema, SpecSchema } from "../openspec/schemas/index.ts";
+import { validateRequirement, validateSpec } from "../openspec/schemas/index.ts";
 import { buildDeltaSpecWithEntry, removeDeltaByIndex } from "../openspec/serializers.ts";
 import { syncSpecs } from "../openspec/sync.ts";
 import type { Document } from "../types/index.ts";
@@ -105,10 +105,10 @@ function validateSpecContent(content: string, name: string): string[] {
 		}),
 	};
 
-	const result = SpecSchema.safeParse(specInput);
+	const result = validateSpec(specInput);
 	if (!result.success) {
 		for (const issue of result.error.issues) {
-			const pathStr = issue.path.join(".");
+			const pathStr = issue.path;
 			const line = findLineNumber(content, purposeMatch?.[1] ?? "");
 			const lineInfo = line !== -1 ? ` (line ${line})` : "";
 			errors.push(`  - ${pathStr}: ${issue.message}${lineInfo}`);
@@ -512,7 +512,7 @@ export function registerChangeCommand(program: Command): void {
 					}
 
 					// Validate against RequirementSchema
-					const reqResult = RequirementSchema.safeParse({
+					const reqResult = validateRequirement({
 						text: options.req,
 						scenarios: [{ rawText: scenarioRawText }],
 					});
@@ -520,7 +520,7 @@ export function registerChangeCommand(program: Command): void {
 					if (!reqResult.success) {
 						console.error("Requirement validation failed:");
 						for (const issue of reqResult.error.issues) {
-							console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
+							console.error(`  - ${issue.path}: ${issue.message}`);
 						}
 						process.exit(1);
 					}

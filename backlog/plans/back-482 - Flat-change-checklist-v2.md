@@ -114,11 +114,28 @@ For spec-delta/new-spec, the caller (e.g., `Core.createDocumentFromInput` or
 
 | type | filename | frontmatter |
 |---|---|---|
-| `spec-delta` | `<name>.spec-delta.md` | id, title, type, createdDate, syncStatus |
+| `spec-delta` | `<name>.spec-delta.md` | id, title, type, createdDate, syncStatus, **targetSpecId** |
 | `new-spec` | `<name>.new-spec.md` | id, title, type, createdDate, syncStatus |
 
 The `title` field stores the spec name (e.g., `"auth"`, `"billing"`). The `id` field
 is auto-generated (different prefix per type, e.g., `DELTA-1`, `NEWSPEC-1`).
+
+For `spec-delta` artifacts, `targetSpecId` is a required frontmatter field that
+references the published spec's ID (e.g., `SPC-3`). User sets this manually when
+creating the spec-delta artifact. Sync uses it to resolve which spec to apply
+deltas to.
+
+Frontmatter example:
+```yaml
+---
+id: DELTA-1
+title: auth
+type: spec-delta
+created_date: 2026-05-16 10:30
+sync_status: pending
+target_spec_id: SPC-3
+---
+```
 
 `saveDocument` overrides filename logic when `directory` is provided:
 - Uses `<title>.spec-delta.md` or `<title>.new-spec.md` instead of
@@ -135,6 +152,7 @@ title: auth
 type: spec-delta
 created_date: 2026-05-16 10:30
 sync_status: pending
+target_spec_id: SPC-3
 ---
 
 ## Motivation
@@ -189,11 +207,42 @@ A change is "complete" when both artifacts are done. No dependencies between the
 
 ### 8. `change sync` is the publish step
 
-- Reads `*.spec-delta.md` and `*.new-spec.md` Documents from change dir
-- For `spec-delta`: applies delta sections to existing spec Document in `specs/`
-- For `new-spec`: creates a new spec Document in `specs/`
-- After sync, updates both the change artifact's `syncStatus` to `"synced"`
-  AND the published spec's `syncStatus` to `"synced"`
+Reads `*.spec-delta.md` and `*.new-spec.md` Documents from change dir.
+Two-step flow — different handling per artifact type.
+
+#### spec-delta processing
+
+- Resolve target spec by `target_spec_id` frontmatter field (e.g., `SPC-3`)
+  - User sets manually when creating the spec-delta artifact
+  - Sync globs `specs/SPC-*.md` to find the matching spec Document
+  - Error if `target_spec_id` is missing or no spec found with that ID
+- Applies ADDED/MODIFIED/REMOVED/RENAMED delta sections to the target spec content
+- Backup original spec content before modifying (to `backlog/changes/<name>/backups/`)
+- Validate result against SpecSchema
+- Write updated spec Document back to `specs/`
+- Update change artifact's `syncStatus` to `"synced"`
+
+#### new-spec processing
+
+- Reads `*.new-spec.md` body
+- Strips frontmatter and `## Motivation` section (if present)
+- Keeps `## Purpose` and `## Requirements` sections as the spec body
+- Creates a new spec Document in `specs/` with:
+  - `type: "specification"`
+  - ID auto-generated (`SPC-<N>`)
+  - `syncStatus: "synced"`
+  - `status: "draft"`
+- Updates change artifact's `syncStatus` to `"synced"`
+
+#### Post-sync
+
+- Both change artifact frontmatter and published spec frontmatter get
+  `syncStatus: "synced"`
+- sync.ts handles frontmatter updates directly:
+  - Reads change artifact via `parseDocument`
+  - Modifies frontmatter `sync_status` field
+  - Writes back via `serializeDocument` + disk write
+  - Same for the published spec Document
 
 ### 9. `listDocuments` — multi-directory scan
 
@@ -248,7 +297,7 @@ the change name (e.g., `"2026-05-16-add-auth"`).
 | `src/constants/index.ts` | (if needed) Add `SPECS` constant. |
 | `src/openspec/change-checklist.ts` | Remove `proposal`, `design`, `publish` artifacts. Keep only `deltas` + `new-specs`. |
 | `src/openspec/archive.ts` | Check `syncStatus` on Documents instead of checking nested dirs. |
-| `src/openspec/sync.ts` | Read flat `*.spec-delta.md` and `*.new-spec.md` from change root. Create new specs from `*.new-spec.md`. Write to `specs/`. Set `syncStatus` on both change artifact and published spec. |
+| `src/openspec/sync.ts` | Glob `*.spec-delta.md` and `*.new-spec.md` from change root. Resolve target spec by `target_spec_id` frontmatter. Create new specs from `*.new-spec.md` body (strip frontmatter + `## Motivation`, keep `## Purpose` + `## Requirements`). Write to `specs/`. Set `syncStatus` on both change artifact and published spec via parseDocument/modify/serializeDocument. |
 | `src/openspec/serializers.ts` | No functional change. |
 | `src/commands/openspec.ts` | Remove proposal scaffolding. `change create` no longer creates `specs/` subdir. `delta add` writes `.spec-delta.md` via `saveDocument` with directory param. `delta list`/`remove` glob flat files. `validate` reads flat files. |
 | `src/core/backlog.ts` | `createDocumentFromInput` routes `spec-delta`/`new-spec` to `saveDocument` with directory override. `createDocumentFromInput` routes `specification` to `specs/` via type routing. |

@@ -15,7 +15,7 @@ import matter from "gray-matter";
 import type { Core } from "../core/backlog.ts";
 import { parseDocument, parseMarkdown } from "../markdown/parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
-import { SpecSchema } from "../openspec/schemas/index.ts";
+import { validateSpec } from "../openspec/schemas/index.ts";
 import type { Document } from "../types/index.ts";
 
 // ─── Types ───
@@ -81,10 +81,10 @@ function validateSpecContent(content: string, name: string): string[] {
 		}),
 	};
 
-	const result = SpecSchema.safeParse(specInput);
+	const result = validateSpec(specInput);
 	if (!result.success) {
 		for (const issue of result.error.issues) {
-			const pathStr = issue.path.join(".");
+			const pathStr = issue.path;
 			const line = findLineNumber(content, purposeMatch?.[1] ?? "");
 			const lineInfo = line !== -1 ? ` (line ${line})` : "";
 			errors.push(`  - ${pathStr}: ${issue.message}${lineInfo}`);
