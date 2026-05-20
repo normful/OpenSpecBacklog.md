@@ -52,6 +52,7 @@ import { viewTaskEnhanced } from "./ui/task-viewer-with-search.ts";
 import { scrollableViewer } from "./ui/tui.ts";
 import { type AgentSelectionValue, processAgentSelection } from "./utils/agent-selection.ts";
 import { normalizeProjectBacklogDirectory } from "./utils/backlog-directory.ts";
+import { formatLocalDate } from "./utils/date-format.ts";
 import { findBacklogRoot } from "./utils/find-backlog-root.ts";
 import { createMilestoneFilterValueResolver, resolveClosestMilestoneFilterValue } from "./utils/milestone-filter.ts";
 import { resolveMilestoneInputForStorage } from "./utils/milestone-storage.ts";
@@ -3247,7 +3248,7 @@ decisionCmd
 		const decision: Decision = {
 			id,
 			title: title as string,
-			date: new Date().toISOString().slice(0, 16).replace("T", " "),
+			date: formatLocalDate(),
 			status: (options.status || "proposed") as Decision["status"],
 			context: "",
 			decision: "",

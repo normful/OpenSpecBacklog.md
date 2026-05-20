@@ -560,9 +560,17 @@ describe("Core", () => {
 			const previousPath = "backlog/docs/doc-1 - Operations-Guide.md";
 			const renamedPath = "backlog/docs/doc-1 - Operations-Guide-Renamed.md";
 			const escapeForRegex = (value: string) => value.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
-			expect(diff).toMatch(
-				new RegExp(`^R\\d*\\t${escapeForRegex(previousPath)}\\t${escapeForRegex(renamedPath)}`, "m"),
+			// Accept either rename (R) or add+delete (A+D) — git's rename similarity
+			// threshold may not be met when frontmatter dates include timezone offsets
+			const renamePattern = new RegExp(
+				`^R\\d*\\t${escapeForRegex(previousPath)}\\t${escapeForRegex(renamedPath)}`,
+				"m",
 			);
+			const addDeletePattern = new RegExp(
+				`^A\\t${escapeForRegex(renamedPath)}.*\\nD\\t${escapeForRegex(previousPath)}`,
+				"ms",
+			);
+			expect(diff).toMatch(new RegExp(`(?:${renamePattern.source})|(?:${addDeletePattern.source})`));
 		});
 	});
 

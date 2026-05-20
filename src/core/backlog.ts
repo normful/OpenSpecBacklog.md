@@ -22,6 +22,7 @@ import {
 	type TaskUpdateInput,
 } from "../types/index.ts";
 import { normalizeAssignee } from "../utils/assignee.ts";
+import { formatLocalDate } from "../utils/date-format.ts";
 import { documentIdsEqual, normalizeDocumentId } from "../utils/document-id.ts";
 import {
 	getDocumentSubPathFromRelativePath,
@@ -999,7 +1000,7 @@ export class Core {
 		}
 
 		const priority = this.normalizePriority(input.priority);
-		const createdDate = new Date().toISOString().slice(0, 16).replace("T", " ");
+		const createdDate = formatLocalDate();
 		if (
 			input.ordinal !== undefined &&
 			(typeof input.ordinal !== "number" || !Number.isFinite(input.ordinal) || input.ordinal < 0)
@@ -1084,7 +1085,7 @@ export class Core {
 		const statusChanged = oldStatus !== newStatus;
 
 		// Always set updatedDate when updating a task
-		task.updatedDate = new Date().toISOString().slice(0, 16).replace("T", " ");
+		task.updatedDate = formatLocalDate();
 
 		await this.fs.saveTask(task);
 		// Keep any in-process ContentStore in sync for immediate UI/search freshness.
@@ -1620,7 +1621,7 @@ export class Core {
 		// Drafts always keep status Draft
 		task.status = "Draft";
 		normalizeAssignee(task);
-		task.updatedDate = new Date().toISOString().slice(0, 16).replace("T", " ");
+		task.updatedDate = formatLocalDate();
 
 		const filepath = await this.fs.saveDraft(task);
 
@@ -1701,9 +1702,7 @@ export class Core {
 				id: newTaskId,
 				status: canonicalStatus,
 				filePath: undefined,
-				...(mutated || draft.status !== canonicalStatus
-					? { updatedDate: new Date().toISOString().slice(0, 16).replace("T", " ") }
-					: {}),
+				...(mutated || draft.status !== canonicalStatus ? { updatedDate: formatLocalDate() } : {}),
 			};
 
 			normalizeAssignee(promotedTask);
@@ -1747,9 +1746,7 @@ export class Core {
 				id: newDraftId,
 				status: "Draft",
 				filePath: undefined,
-				...(mutated || task.status !== "Draft"
-					? { updatedDate: new Date().toISOString().slice(0, 16).replace("T", " ") }
-					: {}),
+				...(mutated || task.status !== "Draft" ? { updatedDate: formatLocalDate() } : {}),
 			};
 
 			normalizeAssignee(demotedDraft);
@@ -2342,7 +2339,7 @@ export class Core {
 		const decision: Decision = {
 			id,
 			title,
-			date: new Date().toISOString().slice(0, 16).replace("T", " "),
+			date: formatLocalDate(),
 			status: "proposed",
 			context: "[Describe the context and problem that needs to be addressed]",
 			decision: "[Describe the decision that was made]",
@@ -2406,7 +2403,7 @@ export class Core {
 				type,
 				status,
 				syncStatus,
-				createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
+				createdDate: formatLocalDate(),
 				rawContent: input.content ?? "",
 				...(tags && tags.length > 0 && { tags }),
 			};
@@ -2450,7 +2447,7 @@ export class Core {
 			type,
 			status: status ?? undefined,
 			rawContent: input.content,
-			updatedDate: new Date().toISOString().slice(0, 16).replace("T", " "),
+			updatedDate: formatLocalDate(),
 			tags: tags && tags.length > 0 ? tags : undefined,
 		};
 
@@ -2535,7 +2532,7 @@ export class Core {
 			return { changed: false, task: refreshedTask ?? editableTask };
 		}
 
-		const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+		const now = formatLocalDate();
 		const withUpdatedDate = upsertTaskUpdatedDate(afterContent, now);
 		await Bun.write(filePath, withUpdatedDate);
 

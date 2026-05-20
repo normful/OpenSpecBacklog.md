@@ -10,7 +10,7 @@ import type {
 import { collectAvailableLabels } from "../../utils/label-filter.ts";
 import { isTerminalStatus } from "../../utils/terminal-status.ts";
 import { collectArchivedMilestoneKeys, getMilestoneLabel, milestoneKey } from "../utils/milestones";
-import { formatStoredUtcDateForCompactDisplay, parseStoredUtcDate } from "../utils/date-display";
+import { formatStoredUtcDateForCompactDisplay, parseStoredDate } from "../utils/date-display";
 import CleanupModal from "./CleanupModal";
 import LabelFilterDropdown from "./LabelFilterDropdown";
 import { SuccessToast } from "./SuccessToast";
@@ -548,8 +548,8 @@ const TaskList: React.FC<TaskListProps> = ({
 					break;
 				}
 				case "created": {
-					const createdA = parseStoredUtcDate(a.createdDate)?.getTime();
-					const createdB = parseStoredUtcDate(b.createdDate)?.getTime();
+					const createdA = parseStoredDate(a.createdDate)?.getTime();
+					const createdB = parseStoredDate(b.createdDate)?.getTime();
 					if (createdA === undefined && createdB === undefined) {
 						result = 0;
 					} else if (createdA === undefined) {
