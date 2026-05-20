@@ -21,7 +21,7 @@ type StartOptions = {
  * @param program - Commander program instance
  */
 export function registerMcpCommand(program: Command): void {
-	const mcpCmd = program.command("mcp");
+	const mcpCmd = program.command("mcp").description("manage Model Context Protocol server: start");
 	registerStartCommand(mcpCmd);
 }
 

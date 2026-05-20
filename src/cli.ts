@@ -1445,7 +1445,10 @@ export async function generateNextDecisionId(core: Core): Promise<string> {
 	return `decision-${nextIdNumber}`;
 }
 
-const taskCmd = program.command("task").aliases(["tasks"]);
+const taskCmd = program
+	.command("task")
+	.aliases(["tasks"])
+	.description("manage tasks: create, list, edit, view, archive, demote");
 
 taskCmd
 	.command("create [title]")
@@ -2590,7 +2593,7 @@ taskCmd
 		});
 	});
 
-const draftCmd = program.command("draft");
+const draftCmd = program.command("draft").description("manage draft tasks: list, create, archive, promote, view");
 
 draftCmd
 	.command("list")
@@ -2786,7 +2789,10 @@ draftCmd
 		await viewTaskEnhanced(draft, { startWithDetailFocus: true, core });
 	});
 
-const milestoneCmd = program.command("milestone").aliases(["milestones"]);
+const milestoneCmd = program
+	.command("milestone")
+	.aliases(["milestones"])
+	.description("manage milestones: list, archive");
 
 milestoneCmd
 	.command("list")
@@ -3057,7 +3063,7 @@ boardCmd
 		}
 	});
 
-const docCmd = program.command("doc");
+const docCmd = program.command("doc").description("manage documents: create, update, list, view");
 
 docCmd
 	.command("create <title>")
@@ -3229,7 +3235,7 @@ docCmd
 		}
 	});
 
-const decisionCmd = program.command("decision");
+const decisionCmd = program.command("decision").description("manage architecture decisions: create");
 
 decisionCmd
 	.command("create <title>")

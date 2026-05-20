@@ -122,7 +122,7 @@ function validateSpecContent(content: string, name: string): string[] {
  * Register `spec` command group with the CLI program.
  */
 export function registerSpecCommand(program: Command): void {
-	const specCmd = program.command("spec");
+	const specCmd = program.command("spec").description("manage specification documents: create, validate, list");
 
 	specCmd
 		.command("create <name>")
@@ -217,7 +217,9 @@ export function registerSpecCommand(program: Command): void {
  * Register `change` command group with the CLI program.
  */
 export function registerChangeCommand(program: Command): void {
-	const changeCmd = program.command("change");
+	const changeCmd = program
+		.command("change")
+		.description("manage change sets: create, validate, status, sync, archive, delta");
 
 	changeCmd
 		.command("create <name>")
