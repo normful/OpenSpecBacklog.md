@@ -179,7 +179,7 @@ export interface Milestone {
 	readonly rawContent: string; // Raw markdown content without frontmatter
 }
 
-export const DOCUMENT_TYPE_VALUES = ["readme", "guide", "specification", "other", "spec-delta", "new-spec"] as const;
+export const DOCUMENT_TYPE_VALUES = ["readme", "guide", "spec", "other", "spec-delta", "new-spec"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPE_VALUES)[number];
 
 export const DOCUMENT_STATUS_VALUES = ["draft", "published", "archived"] as const;

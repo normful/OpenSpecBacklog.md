@@ -588,7 +588,7 @@ describe("Markdown Serializer", () => {
 			const document: Document = {
 				id: "doc-1",
 				title: "API Documentation",
-				type: "specification",
+				type: "spec",
 				createdDate: "2025-06-07",
 				updatedDate: "2025-06-08",
 				rawContent: "This document describes the API endpoints.",
@@ -599,7 +599,7 @@ describe("Markdown Serializer", () => {
 
 			expect(result).toContain("id: doc-1");
 			expect(result).toContain("title: API Documentation");
-			expect(result).toContain("type: specification");
+			expect(result).toContain("type: spec");
 			expect(result).toContain("created_date: '2025-06-07'");
 			expect(result).toContain("updated_date: '2025-06-08'");
 			expect(result).toContain("tags:");
@@ -643,7 +643,7 @@ describe("Markdown Serializer", () => {
 		});
 
 		it("should parse sync_status from frontmatter", () => {
-			const content = `---\nid: doc-4\ntitle: "Synced Spec"\ntype: specification\nsync_status: synced\ncreated_date: 2025-06-10\n---\n\nBody.`;
+			const content = `---\nid: doc-4\ntitle: "Synced Spec"\ntype: spec\nsync_status: synced\ncreated_date: 2025-06-10\n---\n\nBody.`;
 			const doc = parseDocument(content);
 			expect(doc.syncStatus).toBe("synced");
 		});

@@ -780,7 +780,7 @@ export class FileSystem {
 	 */
 	private resolveDocumentDir(type: Document["type"]): string {
 		switch (type) {
-			case "specification":
+			case "spec":
 				return this.specsDir;
 			case "spec-delta":
 			case "new-spec":
@@ -803,7 +803,7 @@ export class FileSystem {
 			const typeSuffix = document.type === "spec-delta" ? "spec-delta" : "new-spec";
 			filename = `${this.sanitizeFilename(document.title)}.${typeSuffix}.md`;
 			relativePath = filename;
-		} else if (document.type === "specification") {
+		} else if (document.type === "spec") {
 			// Published specs: SPC-<id> - <title>.md in baseDir
 			const suffix = canonicalId.replace(/^SPC-/i, "");
 			filename = `SPC-${suffix} - ${this.sanitizeFilename(document.title)}.md`;
@@ -822,8 +822,8 @@ export class FileSystem {
 
 		if (!directory) {
 			// Only do ID-based dedup for non-change artifacts (change artifacts are transient)
-			const glob = new Bun.Glob(document.type === "specification" ? "SPC-*.md" : "**/doc-*.md");
-			const scanDir = document.type === "specification" ? baseDir : this.docsDir;
+			const glob = new Bun.Glob(document.type === "spec" ? "SPC-*.md" : "**/doc-*.md");
+			const scanDir = document.type === "spec" ? baseDir : this.docsDir;
 			const existingMatches = (await Array.fromAsync(glob.scan({ cwd: scanDir, followSymlinks: true }))).map(
 				(relative) => normalizeDocumentRelativePath(relative),
 			);

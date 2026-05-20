@@ -53,7 +53,7 @@ export function findLineNumber(content: string, text: string): number {
 /**
  * Build a change directory path relative to project root.
  * Changes still write delta specs (specs/<name>/spec.md) to this dir.
- * The proposal and design content are now Documents in backlog/docs/.
+ * The proposal and design content are now Documents in specs/.
  */
 function changeDir(name: string, projectRoot: string): string {
 	return join(projectRoot, "backlog", "changes", name);
@@ -122,32 +122,30 @@ function validateSpecContent(content: string, name: string): string[] {
  * Register `spec` command group with the CLI program.
  */
 export function registerSpecCommand(program: Command): void {
-	const specCmd = program.command("spec").description("manage specification documents: create, validate, list");
+	const specCmd = program.command("spec").description("manage spec documents: create, validate, list");
 
 	specCmd
 		.command("create <name>")
-		.description("scaffold a new spec document in backlog/docs/")
+		.description("scaffold a new spec document in specs/")
 		.action(async (name: string) => {
 			const projectRoot = await requireProjectRoot();
 			const core = new Core(projectRoot);
 
 			// Check for existing spec with same title
 			const existing = await core.filesystem.listDocuments();
-			const duplicate = existing.find(
-				(d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "specification",
-			);
+			const duplicate = existing.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "spec");
 			if (duplicate) {
-				console.error(`Spec "${name}" already exists as document ${duplicate.id} in backlog/docs/`);
+				console.error(`Spec "${name}" already exists as document ${duplicate.id} in specs/`);
 				process.exit(1);
 			}
 
 			const doc = await core.createDocumentFromInput({
 				title: name,
-				type: "specification",
+				type: "spec",
 				status: "draft",
 				content: SPEC_TEMPLATE,
 			});
-			console.log(`Created spec "${name}" as document ${doc.id} in backlog/docs/`);
+			console.log(`Created spec "${name}" as document ${doc.id} in specs/`);
 		});
 
 	specCmd
@@ -158,9 +156,9 @@ export function registerSpecCommand(program: Command): void {
 			const core = new Core(projectRoot);
 
 			const docs = await core.filesystem.listDocuments();
-			const spec = docs.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "specification");
+			const spec = docs.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "spec");
 			if (!spec) {
-				console.error(`Spec "${name}" not found in backlog/docs/.`);
+				console.error(`Spec "${name}" not found.`);
 				process.exit(1);
 			}
 
@@ -191,7 +189,7 @@ export function registerSpecCommand(program: Command): void {
 			}
 
 			const docs = await core.filesystem.listDocuments();
-			const specs = docs.filter((doc: Document) => doc.type === "specification");
+			const specs = docs.filter((doc: Document) => doc.type === "spec");
 
 			if (specs.length === 0) {
 				console.log("No specs found.");

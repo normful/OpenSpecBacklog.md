@@ -35,7 +35,7 @@ function cleanup(env: TestEnv): void {
 async function createSpecDoc(env: TestEnv, name: string, content: string): Promise<void> {
 	await env.core.createDocumentFromInput({
 		title: name,
-		type: "specification",
+		type: "spec",
 		status: "draft",
 		content,
 	});
@@ -43,7 +43,7 @@ async function createSpecDoc(env: TestEnv, name: string, content: string): Promi
 
 async function getSpecDoc(env: TestEnv, name: string) {
 	const docs = await env.core.filesystem.listDocuments();
-	return docs.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "specification") ?? null;
+	return docs.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "spec") ?? null;
 }
 
 async function readSpecDoc(env: TestEnv, name: string): Promise<string | null> {
@@ -58,7 +58,7 @@ async function specDocExists(env: TestEnv, name: string): Promise<boolean> {
 
 async function getSpecId(env: TestEnv, specName: string): Promise<string> {
 	const docs = await env.core.filesystem.listDocuments();
-	const spec = docs.find((d) => d.title.toLowerCase() === specName.toLowerCase() && d.type === "specification");
+	const spec = docs.find((d) => d.title.toLowerCase() === specName.toLowerCase() && d.type === "spec");
 	return spec?.id ?? specName;
 }
 

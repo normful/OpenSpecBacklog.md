@@ -238,7 +238,7 @@ async function processSpecDelta(
 
 	// Find target spec Document in specs/ by ID
 	const allDocs = await core.filesystem.listDocuments();
-	const specDoc = allDocs.find((d) => d.id.toLowerCase() === targetSpecId.toLowerCase() && d.type === "specification");
+	const specDoc = allDocs.find((d) => d.id.toLowerCase() === targetSpecId.toLowerCase() && d.type === "spec");
 	if (!specDoc) {
 		return { file: fileName, targetSpecId, applied: 0, errors: [`Target spec "${targetSpecId}" not found in specs/`] };
 	}
@@ -377,7 +377,7 @@ async function processNewSpec(
 	if (!isDryRun) {
 		const createdDoc = await core.createDocumentFromInput({
 			title: specName,
-			type: "specification",
+			type: "spec",
 			status: "draft",
 			content: body,
 		});

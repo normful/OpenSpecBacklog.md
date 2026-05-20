@@ -102,9 +102,7 @@ describe("MCP document tools", () => {
 		});
 
 		expect(invalidCreate.isError).toBe(true);
-		expect(getText(invalidCreate.content)).toContain(
-			"Field 'type' must be one of: readme, guide, specification, other",
-		);
+		expect(getText(invalidCreate.content)).toContain("Field 'type' must be one of: readme, guide, spec, other");
 
 		await mcpServer.testInterface.callTool({
 			params: {
@@ -129,9 +127,7 @@ describe("MCP document tools", () => {
 		});
 
 		expect(invalidUpdate.isError).toBe(true);
-		expect(getText(invalidUpdate.content)).toContain(
-			"Field 'type' must be one of: readme, guide, specification, other",
-		);
+		expect(getText(invalidUpdate.content)).toContain("Field 'type' must be one of: readme, guide, spec, other");
 	});
 
 	it("filters documents using substring search", async () => {
