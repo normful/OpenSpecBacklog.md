@@ -894,56 +894,52 @@ export class FileSystem {
 	}
 
 	async listDocuments(status?: string): Promise<Document[]> {
-		try {
-			const docsDir = await this.getDocsDir();
-			const specsDir = this.specsDir;
-			const allDocs: Document[] = [];
+		const docsDir = await this.getDocsDir();
+		const specsDir = this.specsDir;
+		const allDocs: Document[] = [];
 
-			// Scan backlog/docs/
-			if (existsSync(docsDir)) {
-				const glob = new Bun.Glob("**/*.md");
-				const docFiles = await Array.fromAsync(glob.scan({ cwd: docsDir, followSymlinks: true }));
-				for (const file of docFiles) {
-					const relativePath = normalizeDocumentRelativePath(file);
-					const base = relativePath.split("/").pop() || relativePath;
-					if (base.toLowerCase() === "readme.md") continue;
-					const filepath = join(docsDir, ...relativePath.split("/"));
-					const content = await Bun.file(filepath).text();
-					const parsed = parseDocument(content);
-					const doc: Document = {
-						...parsed,
-						path: relativePath,
-					};
-					if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
-						allDocs.push(doc);
-					}
+		// Scan backlog/docs/
+		if (existsSync(docsDir)) {
+			const glob = new Bun.Glob("**/*.md");
+			const docFiles = await Array.fromAsync(glob.scan({ cwd: docsDir, followSymlinks: true }));
+			for (const file of docFiles) {
+				const relativePath = normalizeDocumentRelativePath(file);
+				const base = relativePath.split("/").pop() || relativePath;
+				if (base.toLowerCase() === "readme.md") continue;
+				const filepath = join(docsDir, ...relativePath.split("/"));
+				const content = await Bun.file(filepath).text();
+				const parsed = parseDocument(content);
+				const doc: Document = {
+					...parsed,
+					path: relativePath,
+				};
+				if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
+					allDocs.push(doc);
 				}
 			}
-
-			// Scan specs/
-			if (existsSync(specsDir)) {
-				const glob = new Bun.Glob("*.md");
-				const specFiles = await Array.fromAsync(glob.scan({ cwd: specsDir, followSymlinks: true }));
-				for (const file of specFiles) {
-					if (file.toLowerCase() === "readme.md") continue;
-					const filepath = join(specsDir, file);
-					const content = await Bun.file(filepath).text();
-					const parsed = parseDocument(content);
-					const doc: Document = {
-						...parsed,
-						path: file,
-					};
-					if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
-						allDocs.push(doc);
-					}
-				}
-			}
-
-			// Stable sort by title for UI/CLI listing
-			return allDocs.sort((a, b) => a.title.localeCompare(b.title));
-		} catch {
-			return [];
 		}
+
+		// Scan specs/
+		if (existsSync(specsDir)) {
+			const glob = new Bun.Glob("*.md");
+			const specFiles = await Array.fromAsync(glob.scan({ cwd: specsDir, followSymlinks: true }));
+			for (const file of specFiles) {
+				if (file.toLowerCase() === "readme.md") continue;
+				const filepath = join(specsDir, file);
+				const content = await Bun.file(filepath).text();
+				const parsed = parseDocument(content);
+				const doc: Document = {
+					...parsed,
+					path: file,
+				};
+				if (!status || doc.status?.toLowerCase() === status.toLowerCase()) {
+					allDocs.push(doc);
+				}
+			}
+		}
+
+		// Stable sort by title for UI/CLI listing
+		return allDocs.sort((a, b) => a.title.localeCompare(b.title));
 	}
 
 	async loadDocument(id: string): Promise<Document> {
