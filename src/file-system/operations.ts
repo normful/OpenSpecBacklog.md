@@ -3,7 +3,13 @@ import { mkdir, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import matter from "gray-matter";
 import lockfile from "proper-lockfile";
-import { DEFAULT_DIRECTORIES, DEFAULT_FILES, DEFAULT_STATUSES, FALLBACK_STATUS } from "../constants/index.ts";
+import {
+	DEFAULT_DIRECTORIES,
+	DEFAULT_FILES,
+	DEFAULT_STATUSES,
+	FALLBACK_STATUS,
+	SPEC_FILENAME_PREFIX,
+} from "../constants/index.ts";
 import { parseDecision, parseDocument, parseMilestone, parseTask } from "../markdown/parser.ts";
 import { serializeDecision, serializeDocument, serializeTask } from "../markdown/serializer.ts";
 import type { BacklogConfig, Decision, Document, Milestone, Task, TaskListFilter } from "../types/index.ts";
@@ -805,8 +811,8 @@ export class FileSystem {
 			relativePath = filename;
 		} else if (document.type === "spec") {
 			// Published specs: SPC-<id> - <title>.md in baseDir
-			const suffix = canonicalId.replace(/^SPC-/i, "");
-			filename = `SPC-${suffix} - ${this.sanitizeFilename(document.title)}.md`;
+			const suffix = canonicalId.replace(new RegExp(`^${SPEC_FILENAME_PREFIX}-`, "i"), "");
+			filename = `${SPEC_FILENAME_PREFIX}-${suffix} - ${this.sanitizeFilename(document.title)}.md`;
 			relativePath = filename;
 		} else {
 			// Regular docs: <canonicalId> - <title>.md with subPath
@@ -822,7 +828,7 @@ export class FileSystem {
 
 		if (!directory) {
 			// Only do ID-based dedup for non-change artifacts (change artifacts are transient)
-			const glob = new Bun.Glob(document.type === "spec" ? "SPC-*.md" : "**/doc-*.md");
+			const glob = new Bun.Glob(document.type === "spec" ? `${SPEC_FILENAME_PREFIX}-*.md` : "**/doc-*.md");
 			const scanDir = document.type === "spec" ? baseDir : this.docsDir;
 			const existingMatches = (await Array.fromAsync(glob.scan({ cwd: scanDir, followSymlinks: true }))).map(
 				(relative) => normalizeDocumentRelativePath(relative),

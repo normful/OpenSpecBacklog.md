@@ -56,6 +56,12 @@ export const FALLBACK_STATUS = "To Do";
 export const WRAP_LIMIT = 72;
 
 /**
+ * Prefix for published spec filenames in the specs/ directory.
+ * Files are named SPC-<id> - <title>.md
+ */
+export const SPEC_FILENAME_PREFIX = "SPC";
+
+/**
  * Default values for advanced configuration options used during project initialization.
  * Shared between CLI and browser wizard to ensure consistent defaults.
  */

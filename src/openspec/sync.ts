@@ -12,6 +12,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import matter from "gray-matter";
+import { SPEC_FILENAME_PREFIX } from "../constants/index.ts";
 import type { Core } from "../core/backlog.ts";
 import { parseDocument, parseMarkdown } from "../markdown/parser.ts";
 import { extractRequirementsSection, parseDeltaSpec } from "../openspec/parsers/index.ts";
@@ -383,7 +384,7 @@ async function processNewSpec(
 		});
 
 		// Set syncStatus on the new spec
-		const specFileName = `SPC-${createdDoc.id.replace(/^SPC-/i, "")} - ${sanitizeFilename(specName)}.md`;
+		const specFileName = `${SPEC_FILENAME_PREFIX}-${createdDoc.id.replace(new RegExp(`^${SPEC_FILENAME_PREFIX}-`, "i"), "")} - ${sanitizeFilename(specName)}.md`;
 		const specFilePath = join(specsDir, specFileName);
 		if (existsSync(specFilePath)) {
 			await updateSyncStatus(specFilePath, "synced");

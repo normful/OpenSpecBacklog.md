@@ -7,6 +7,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { requireProjectRoot } from "../cli.ts";
+import { SPEC_FILENAME_PREFIX } from "../constants/index.ts";
 import { Core } from "../core/backlog.ts";
 import { archiveChange } from "../openspec/archive.ts";
 import { CHANGE_ARTIFACTS, computeArtifactStatus, detectCompleted } from "../openspec/change-checklist.ts";
@@ -135,7 +136,7 @@ export function registerSpecCommand(program: Command): void {
 			const existing = await core.filesystem.listDocuments();
 			const duplicate = existing.find((d) => d.title.toLowerCase() === name.toLowerCase() && d.type === "spec");
 			if (duplicate) {
-				console.error(`Spec "${name}" already exists as document ${duplicate.id} in specs/`);
+				console.error(`Spec "${name}" already exists as ${SPEC_FILENAME_PREFIX}-${duplicate.id} - ... .md in specs/`);
 				process.exit(1);
 			}
 
@@ -145,7 +146,7 @@ export function registerSpecCommand(program: Command): void {
 				status: "draft",
 				content: SPEC_TEMPLATE,
 			});
-			console.log(`Created spec "${name}" as document ${doc.id} in specs/`);
+			console.log(`Created spec "${name}" as ${SPEC_FILENAME_PREFIX}-${doc.id} - "${name}".md in specs/`);
 		});
 
 	specCmd
