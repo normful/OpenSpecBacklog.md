@@ -1,3 +1,8 @@
+// Single source of truth for the published package name.
+// Must match "name" in package.json; scripts/publish-npm.cjs asserts this and
+// src/test/resolveBinary.test.ts guards it.
+const PACKAGE_BASE = "@normful/openspec-backlog.md";
+
 function mapPlatform(platform = process.platform) {
 	switch (platform) {
 		case "win32":
@@ -21,7 +26,7 @@ function mapArch(arch = process.arch) {
 }
 
 function getPackageName(platform = process.platform, arch = process.arch) {
-	return `backlog.md-${mapPlatform(platform)}-${mapArch(arch)}`;
+	return `${PACKAGE_BASE}-${mapPlatform(platform)}-${mapArch(arch)}`;
 }
 
 function resolveBinaryPath(platform = process.platform, arch = process.arch) {
@@ -30,4 +35,4 @@ function resolveBinaryPath(platform = process.platform, arch = process.arch) {
 	return require.resolve(`${packageName}/${binary}`);
 }
 
-module.exports = { getPackageName, resolveBinaryPath };
+module.exports = { PACKAGE_BASE, getPackageName, resolveBinaryPath };

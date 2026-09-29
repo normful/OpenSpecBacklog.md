@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { spawn } = require("node:child_process");
-const { resolveBinaryPath } = require("./resolveBinary.cjs");
+const { getPackageName, resolveBinaryPath } = require("./resolveBinary.cjs");
 
 let binaryPath;
 try {
@@ -13,15 +13,11 @@ try {
 
 // Clean up unexpected args some global shims pass (e.g. bun) like the binary path itself
 const rawArgs = process.argv.slice(2);
+const platformPackageDir = `node_modules/${getPackageName()}/`;
 const cleanedArgs = rawArgs.filter((arg) => {
 	if (arg === binaryPath) return false;
 	// Filter any accidental deep path to our platform package binary
-	try {
-		const pattern = /node_modules[/\\]backlog\.md-(darwin|linux|windows)-[^/\\]+[/\\]backlog(\.exe)?$/i;
-		return !pattern.test(arg);
-	} catch {
-		return true;
-	}
+	return !arg.replace(/\\/g, "/").includes(platformPackageDir);
 });
 
 // Spawn the binary with cleaned arguments

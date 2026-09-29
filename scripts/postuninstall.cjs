@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 
 const { spawn } = require("node:child_process");
+const { getPackageName } = require("./resolveBinary.cjs");
 
-// Platform-specific packages to uninstall
+// Platform-specific packages to uninstall, derived from the published naming scheme
 const platformPackages = [
-	"backlog.md-linux-x64",
-	"backlog.md-linux-arm64",
-	"backlog.md-darwin-x64",
-	"backlog.md-darwin-arm64",
-	"backlog.md-windows-x64",
-];
+	["linux", "x64"],
+	["linux", "arm64"],
+	["darwin", "x64"],
+	["darwin", "arm64"],
+	["win32", "x64"],
+].map(([platform, arch]) => getPackageName(platform, arch));
 
 // Detect package manager
 const packageManager = process.env.npm_config_user_agent?.split("/")[0] || "npm";

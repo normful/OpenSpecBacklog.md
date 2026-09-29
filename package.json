@@ -1,5 +1,5 @@
 {
-	"name": "backlog.md",
+	"name": "@normful/openspec-backlog.md",
 	"version": "1.45.1",
 	"type": "module",
 	"module": "src/cli.ts",
@@ -12,11 +12,11 @@
 		"backlog": "scripts/cli.cjs"
 	},
 	"optionalDependencies": {
-		"backlog.md-darwin-arm64": "*",
-		"backlog.md-darwin-x64": "*",
-		"backlog.md-linux-arm64": "*",
-		"backlog.md-linux-x64": "*",
-		"backlog.md-windows-x64": "*"
+		"@normful/openspec-backlog.md-darwin-arm64": "*",
+		"@normful/openspec-backlog.md-darwin-x64": "*",
+		"@normful/openspec-backlog.md-linux-arm64": "*",
+		"@normful/openspec-backlog.md-linux-x64": "*",
+		"@normful/openspec-backlog.md-windows-x64": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.12",
@@ -60,6 +60,7 @@
 		"cli": "bun run build:css && bun src/cli.ts",
 		"mcp": "bun src/cli.ts mcp start",
 		"update-nix": "sh scripts/update-nix.sh",
+		"publish:npm": "bun scripts/publish-npm.cjs",
 		"postinstall": "sh -c 'command -v bun2nix >/dev/null 2>&1 && bun2nix -o bun.nix || (command -v nix >/dev/null 2>&1 && nix --extra-experimental-features \"nix-command flakes\" run github:baileyluTCD/bun2nix/85d692d68a5345d868d3bb1158b953d2996d70f7 -- -o bun.nix || true)'"
 	},
 	"lint-staged": {
@@ -76,10 +77,10 @@
 	"author": "Alex Gavrilescu (https://github.com/MrLesk)",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/MrLesk/Backlog.md.git"
+		"url": "git+https://github.com/normful/OpenSpecBacklog.md.git"
 	},
 	"bugs": {
-		"url": "https://github.com/MrLesk/Backlog.md/issues"
+		"url": "https://github.com/normful/OpenSpecBacklog.md/issues"
 	},
 	"homepage": "https://backlog.md",
 	"keywords": [
