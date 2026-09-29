@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@pi'
 created_date: '2026-09-29 20:37+09:00'
-updated_date: '2026-09-29 21:01+09:00'
+updated_date: '2026-09-29 21:04+09:00'
 labels: []
 dependencies: []
 references:
@@ -43,6 +43,8 @@ Source changes: package.json name/optionalDependencies/repository/bugs + publish
 New: scripts/publish-npm.cjs (bun run publish:npm). Dry run by default (builds all 5 targets, stages dist/npm/, validates every package with npm publish --dry-run); --publish publishes platform packages, waits for registry propagation, publishes the root package, then verifies a clean install. --targets/--version/--allow-dirty flags. Staged layout verified locally: the shim resolves the platform package and reports 1.45.1.
 
 Remaining step is gated on the user: npm login plus @normful scope ownership confirmation, then `bun run publish:npm -- --publish`. Publishing is irreversible (a name@version can never be reused).
+
+bun.lock regenerated (bun install --ignore-scripts --lockfile-only) because it records the root package name and optionalDependencies. That also cleared stale zod/yaml root entries left by b765ecd, which had already broken `bun install --frozen-lockfile` before this change (confirmed against the pre-change manifest).
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

@@ -365,6 +365,15 @@ Deviations from this plan, all deliberate:
    an extra level of quoting and `backlog -v` printed `"1.45.1"` with quotes.
 4. **Staging is wiped once, before the build**, not inside the staging step —
    wiping after the compiles deleted the freshly built binaries.
+5. **`bun.lock` was regenerated** (`bun install --ignore-scripts --lockfile-only`)
+   because it records the root package name and `optionalDependencies`. That
+   pull-in also drops stale `zod`/`yaml` root entries left by commit `b765ecd`
+   ("drop zod + yaml deps, replace with pure TS validators"), which had already
+   broken `bun install --frozen-lockfile` before this change — verified by
+   running the frozen check against the pre-change manifest. No new versions are
+   introduced: the lock's transitive `zod@3.25.76` / `yaml@2.8.3` resolutions
+   simply become the root resolution, so the per-package override entries
+   disappear.
 
 Local verification performed against the staged layout (no registry involved):
 
