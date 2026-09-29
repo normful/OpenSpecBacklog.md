@@ -1,11 +1,11 @@
 ---
 id: BACK-483
 title: Publish fork to npm under the @normful npm scope
-status: In Progress
+status: Done
 assignee:
   - '@pi'
 created_date: '2026-09-29 20:37+09:00'
-updated_date: '2026-09-29 21:04+09:00'
+updated_date: '2026-09-29 21:46+09:00'
 labels: []
 dependencies: []
 references:
@@ -26,11 +26,11 @@ Full plan: backlog/plans/back-483 - Publish-fork-to-npm-under-the-normful-npm-sc
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A local script stages and publishes @normful/openspec-backlog.md plus its platform packages; real publish requires an explicit flag (dry-run is the default).
-- [ ] #2 npm install @normful/openspec-backlog.md in a clean dir yields a working backlog CLI reporting the repo version.
-- [ ] #3 Root package optionalDependencies reference only platform packages published in the same run.
-- [ ] #4 Source package names, resolveBinary.cjs, postuninstall.cjs and resolveBinary tests agree on the scoped names.
-- [ ] #5 No publish ever runs without npm auth and a clean git tree.
+- [x] #1 A local script stages and publishes @normful/openspec-backlog.md plus its platform packages; real publish requires an explicit flag (dry-run is the default).
+- [x] #2 npm install @normful/openspec-backlog.md in a clean dir yields a working backlog CLI reporting the repo version.
+- [x] #3 Root package optionalDependencies reference only platform packages published in the same run.
+- [x] #4 Source package names, resolveBinary.cjs, postuninstall.cjs and resolveBinary tests agree on the scoped names.
+- [x] #5 No publish ever runs without npm auth and a clean git tree.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -46,6 +46,18 @@ Remaining step is gated on the user: npm login plus @normful scope ownership con
 
 bun.lock regenerated (bun install --ignore-scripts --lockfile-only) because it records the root package name and optionalDependencies. That also cleared stale zod/yaml root entries left by b765ecd, which had already broken `bun install --frozen-lockfile` before this change (confirmed against the pre-change manifest).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Published the fork to npm under the @normful scope and verified it end to end.
+
+Source: package rename to @normful/openspec-backlog.md (scoped optionalDependencies, fork repository/bugs), PACKAGE_BASE as the single source of truth in resolveBinary.cjs with cli.cjs arg filter and postuninstall.cjs deriving from it, PACKAGE_BASE-vs-package.json drift test, bun.lock synced (also cleared the stale zod/yaml root entries that were already breaking bun install --frozen-lockfile).
+
+New scripts/publish-npm.cjs (bun run publish:npm): dry run by default; --publish builds all five targets, publishes the platform packages, waits for propagation, publishes the root package, then verifies a clean install.
+
+Result: @normful/openspec-backlog.md@1.45.1 plus darwin-arm64, darwin-x64, linux-arm64, linux-x64 and windows-x64 platform packages, all on the latest tag (~177 MB uploaded). Acceptance: a fresh npm install pulls only the root plus the matching platform package and the installed backlog reports 1.45.1 and lists tasks in this repo. Remaining known gap: the four non-native binaries are published but unverified locally; a fix needs a new version for all six packages.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

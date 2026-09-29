@@ -387,3 +387,41 @@ Local verification performed against the staged layout (no registry involved):
   linux-arm64 107.9 MB, linux-x64 107.4 MB, windows-x64 123.4 MB. The non-native
   targets carry a larger embedded runtime, so expect ~25–45 MB tarballs each.
 - `bun test` (1422 pass, 2 skip), `bunx tsc --noEmit`, `bun run check .` all pass.
+
+## Publish record — 1.45.1 (2026-09-29)
+
+`bun run publish:npm -- --publish` published all six packages under `@normful`,
+each on the `latest` tag:
+
+| Package | Tarball | Unpacked |
+| --- | --- | --- |
+| `@normful/openspec-backlog.md` | 2.9 kB | 6.2 kB |
+| `-darwin-arm64` | 25.0 MB | 69.6 MB |
+| `-darwin-x64` | 27.3 MB | 74.8 MB |
+| `-linux-arm64` | 40.6 MB | 107.9 MB |
+| `-linux-x64` | 40.5 MB | 107.4 MB |
+| `-windows-x64` | 43.5 MB | 123.4 MB |
+
+Observations worth keeping:
+
+1. **Propagation lag is real and asymmetric.** All five platform packages were
+   visible on the first `npm view` check, but the root package's optional
+   dependency needed ~19 retries (≈4.5 min) before a fresh `npm install`
+   succeeded. The bounded retry loop is not defensive padding.
+2. **npm asked for interactive browser auth** during the first publish
+   (`Authenticate your account at https://www.npmjs.com/auth/cli/<id>`). The run
+   blocks until that is answered, so this flow is not unattended-safe. Phase 3
+   (trusted publishing via GitHub Actions OIDC) removes that obstacle.
+3. **The four non-native binaries are published but unverified.** Nothing on this
+   machine can execute them; the install-sanity step only covers darwin-arm64.
+   Any fix requires a new version (1.45.2) across all six packages because the
+   root pins exact platform versions.
+4. `npm i -g` was deliberately not exercised: the global `backlog` on this
+   machine is a `bun link` symlink to `<repo>/dist/backlog`, and an npm global
+   install would compete with it on `PATH`.
+
+Acceptance evidence (fresh directory, real registry): `npm install
+@normful/openspec-backlog.md` installed exactly 2 packages — the root and
+`-darwin-arm64` (the `os`/`cpu` gating kept the other four out) — and the
+installed `backlog -v` reported `1.45.1`, with `backlog task list --plain`
+listing tasks from this repository.
